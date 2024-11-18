@@ -111,7 +111,7 @@ class WorkQueue
     using BlockingReaderWriterQueue = moodycamel::BlockingReaderWriterQueue<T, MAX_BLOCK_SIZE>;
 
 public:
-    WorkQueue() : m_commandQueue(31), m_pollingQueue(31), m_callbackQueue(31){};
+    WorkQueue() : m_commandQueue(31), m_pollingQueue(31), m_callbackQueue(31) {};
     ~WorkQueue();
 
     void start();

@@ -140,8 +140,7 @@ void WorkQueue::ThreadRun()
         assert(command != nullptr);
         assert(command->has_work());
 
-        // #TODO: Spawn jobs for command to unclog the queue.
-
+        // Execute the work
         WorkQueueResultPtr result = command->work();
 
         m_lastFinishedCommandId = command->command_id;

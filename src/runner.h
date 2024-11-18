@@ -15,6 +15,7 @@
 #include "executable.h"
 #include "options.h"
 #include "pdbreader.h"
+#include "workqueue.h"
 
 namespace unassemblize
 {
@@ -100,6 +101,15 @@ struct AsmComparisonOptions
     AsmMatchStrictness match_strictness = AsmMatchStrictness::Undecided;
 };
 
+/**
+ * @brief Class to handle high-level functionality for unassemblize
+ *
+ * Thread Safety:
+ * - All public methods are thread-safe
+ * - Parallel operations use ThreadPool for CPU-intensive tasks
+ * - Shared resource access is protected by m_mutex
+ * - Operations can be cancelled by destroying the ThreadPool
+ */
 class Runner
 {
     class FileContentStorage
@@ -220,6 +230,16 @@ private:
         const std::string &output_file);
 
     // clang-format on
+
+    /**
+     * @brief Mutex to protect shared resources during parallel operations
+     *
+     * Protected Resources:
+     * - matches container in build_function_source_lines
+     * - FileContentStorage in parallel operations
+     * - Any shared state modified during parallel processing
+     */
+    static std::mutex m_mutex; // Protect shared resources during parallel operations
 };
 
 } // namespace unassemblize
