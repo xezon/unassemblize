@@ -240,6 +240,15 @@ private:
      * - Any shared state modified during parallel processing
      */
     static std::mutex m_mutex; // Protect shared resources during parallel operations
+
+    /**
+     * @brief Stores error information from parallel processing operations
+     */
+    struct ErrorInfo
+    {
+        std::string message;
+        size_t match_index;
+    };
 };
 
 } // namespace unassemblize

@@ -481,7 +481,7 @@ void Runner::disassemble_function_matches(MatchedFunctions &matches, ExecutableP
 
     // Create thread pool for parallel processing
     ThreadPool pool;
-    std::vector<std::future<void>> results; // renamed from futures to avoid confusion
+    std::vector<std::future<void>> results;
     results.reserve(matches.size()); // pre-allocate for efficiency
 
     // Process each match in parallel
@@ -557,24 +557,44 @@ void Runner::build_comparison_records(MatchedFunctions &matches, uint32_t lookah
     std::vector<std::future<void>> results;
     results.reserve(matches.size());
 
-    for (MatchedFunction &match : matches)
+    std::vector<ErrorInfo> errors;
+    std::mutex error_mutex; // Protect errors vector
+
+    for (size_t i = 0; i < matches.size(); ++i)
     {
-        results.push_back(pool.enqueue([&match, lookahead_limit]() {
+        MatchedFunction &match = matches[i];
+        results.push_back(pool.enqueue([&match, &errors, &error_mutex, lookahead_limit, i]() {
             try
             {
                 match.comparison = AsmMatcher::run_comparison(match.function_pair, lookahead_limit);
             }
             catch (const std::exception &e)
             {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                // Log error or handle exception
+                std::lock_guard<std::mutex> lock(error_mutex);
+                errors.push_back({fmt::format("Error comparing function '{}': {}", match.name, e.what()), i});
+            }
+            catch (...)
+            {
+                std::lock_guard<std::mutex> lock(error_mutex);
+                errors.push_back({fmt::format("Unknown error comparing function '{}'", match.name), i});
             }
         }));
     }
 
+    // Wait for all tasks to complete
     for (auto &result : results)
     {
         result.get();
+    }
+
+    // Report errors if any occurred
+    if (!errors.empty())
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto &error : errors)
+        {
+            fprintf(stderr, "Warning: %s\n", error.message.c_str());
+        }
     }
 }
 
