@@ -101,6 +101,14 @@ FetchContent_Declare(readerwriterqueue
 )
 FetchContent_MakeAvailable(readerwriterqueue)
 
+FetchContent_Declare(
+    bs_thread_pool
+    GIT_REPOSITORY https://github.com/bshoshany/thread-pool.git
+    GIT_TAG        v4.1.0
+    SOURCE_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/BS_thread_pool
+)
+FetchContent_MakeAvailable(bs_thread_pool)
+
 set(GIT_PRE_CONFIGURE_FILE "gitinfo.cpp.in")
 set(GIT_POST_CONFIGURE_FILE "${CMAKE_CURRENT_BINARY_DIR}/gitinfo.cpp")
 
@@ -174,6 +182,7 @@ target_link_libraries(unassemblize PRIVATE
 target_include_directories(unassemblize PRIVATE
     .
     src
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/BS_thread_pool/include
 )
 
 if(WINDOWS)

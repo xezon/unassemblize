@@ -143,7 +143,7 @@ void WorkQueue::ThreadRun()
         assert(command->has_work());
 
         // Submit work to thread pool
-        WorkQueueResultPtr result = m_threadPool.enqueue([cmd = std::move(command)]() { return cmd->work(); }).get();
+        WorkQueueResultPtr result = m_threadPool.submit_task([cmd = std::move(command)]() { return cmd->work(); }).get();
 
         m_lastFinishedCommandId = command->command_id;
 

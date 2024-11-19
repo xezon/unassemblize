@@ -16,7 +16,7 @@
 #define MOODYCAMEL_EXCEPTIONS_ENABLED 0
 #include "readerwriterqueue.h"
 #include "runner.h"
-#include "threadpool.h"
+#include <bs_thread_pool.hpp>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -147,7 +147,7 @@ private:
     volatile bool m_quit = false;
 
     // Add thread pool for parallel command execution
-    ThreadPool m_threadPool;
+    BS::thread_pool m_threadPool;
 };
 
 struct WorkQueueCommandQuit : public WorkQueueCommand
