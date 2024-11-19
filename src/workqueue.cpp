@@ -128,9 +128,11 @@ void WorkQueue::ThreadRun()
         if (m_quit)
         {
             if (!m_commandQueue.try_dequeue(command))
+            {
                 // Queue is finally empty. Quit.
                 // Wait for jobs here when applicable.
                 break;
+            }
         }
         else
         {
@@ -140,32 +142,38 @@ void WorkQueue::ThreadRun()
         assert(command != nullptr);
         assert(command->has_work());
 
-        // Execute the work
-        WorkQueueResultPtr result = command->work();
+        // Submit work to thread pool
+        WorkQueueResultPtr result = m_threadPool.enqueue([cmd = std::move(command)]() { return cmd->work(); }).get();
 
         m_lastFinishedCommandId = command->command_id;
 
-        const bool has_callback = command->has_callback();
-        const bool has_delayed_command = command->has_delayed_command();
-
         // Command work functions do not need to return a result,
         // but when using a callback or delayed command then a result is required.
-        if (result == nullptr && (has_callback || has_delayed_command))
+        if (result == nullptr)
         {
-            result = std::make_unique<WorkQueueResult>();
+            const bool has_callback = command->has_callback();
+            const bool has_delayed_command = command->has_delayed_command();
+
+            if (has_callback || has_delayed_command)
+            {
+                result = std::make_unique<WorkQueueResult>();
+            }
         }
 
         if (result != nullptr)
         {
             result->command = std::move(command);
 
+            const bool has_callback = result->command->has_callback();
+            const bool has_delayed_command = result->command->has_delayed_command();
+
             if (has_callback || has_delayed_command)
             {
-                m_callbackQueue.enqueue(std::move(result));
+                m_callbackQueue.enqueue(result);
             }
             else
             {
-                m_pollingQueue.enqueue(std::move(result));
+                m_pollingQueue.enqueue(result);
             }
         }
     }

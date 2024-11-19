@@ -16,6 +16,7 @@
 #define MOODYCAMEL_EXCEPTIONS_ENABLED 0
 #include "readerwriterqueue.h"
 #include "runner.h"
+#include "threadpool.h"
 #include <functional>
 #include <memory>
 #include <thread>
@@ -144,6 +145,9 @@ private:
     std::atomic<WorkQueueCommandId> m_lastFinishedCommandId = InvalidWorkQueueCommandId;
 
     volatile bool m_quit = false;
+
+    // Add thread pool for parallel command execution
+    ThreadPool m_threadPool;
 };
 
 struct WorkQueueCommandQuit : public WorkQueueCommand
