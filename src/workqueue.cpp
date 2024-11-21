@@ -121,62 +121,65 @@ void WorkQueue::ThreadFunction(WorkQueue *self)
 
 void WorkQueue::ThreadRun()
 {
+    std::vector<std::future<WorkQueueResultPtr>> futures;
+
     while (true)
     {
-        WorkQueueCommandPtr command;
+        // Process any completed tasks (non-blocking)
+        for (size_t i = 0; i < futures.size();)
+        {
+            if (futures[i].wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                WorkQueueResultPtr result = futures[i].get();
+                if (result != nullptr)
+                {
+                    m_lastFinishedCommandId = result->command->command_id;
 
+                    const bool has_callback = result->command->has_callback();
+                    const bool has_delayed_command = result->command->has_delayed_command();
+
+                    if (has_callback || has_delayed_command)
+                    {
+                        m_callbackQueue.enqueue(result);
+                    }
+                    else
+                    {
+                        m_pollingQueue.enqueue(result);
+                    }
+                }
+                futures.erase(futures.begin() + i);
+            }
+            else
+            {
+                ++i;
+            }
+        }
+
+        // Try to get a new command
+        WorkQueueCommandPtr command;
         if (m_quit)
         {
-            if (!m_commandQueue.try_dequeue(command))
+            // During shutdown: check for remaining commands
+            if (!m_commandQueue.try_dequeue(command) && futures.empty())
             {
-                // Queue is finally empty. Quit.
-                // Wait for jobs here when applicable.
+                // No more commands and no running tasks - safe to quit
                 break;
             }
         }
         else
         {
+            // Normal operation: wait for new commands
             m_commandQueue.wait_dequeue(command);
         }
 
-        assert(command != nullptr);
-        assert(command->has_work());
-
-        // Submit work to thread pool
-        WorkQueueResultPtr result = ThreadPoolSingleton::get_workqueue_pool()
-                                        .submit_task([cmd = std::move(command)]() { return cmd->work(); })
-                                        .get();
-
-        m_lastFinishedCommandId = command->command_id;
-
-        // Command work functions do not need to return a result,
-        // but when using a callback or delayed command then a result is required.
-        if (result == nullptr)
+        // Submit new command if we got one
+        if (command)
         {
-            const bool has_callback = command->has_callback();
-            const bool has_delayed_command = command->has_delayed_command();
+            assert(command != nullptr);
+            assert(command->has_work());
 
-            if (has_callback || has_delayed_command)
-            {
-                result = std::make_unique<WorkQueueResult>();
-            }
-        }
-
-        if (result != nullptr)
-        {
-            result->command = std::move(command);
-
-            const bool has_callback = result->command->has_callback();
-            const bool has_delayed_command = result->command->has_delayed_command();
-
-            if (has_callback || has_delayed_command)
-            {
-                m_callbackQueue.enqueue(result);
-            }
-            else
-            {
-                m_pollingQueue.enqueue(result);
-            }
+            futures.push_back(
+                ThreadPoolSingleton::get_workqueue_pool().submit_task([cmd = std::move(command)]() { return cmd->work(); }));
         }
     }
 }
