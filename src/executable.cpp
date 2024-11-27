@@ -318,14 +318,14 @@ bool Executable::load_config(const char *filename, bool overwrite_symbols)
 {
     ExecutableSerializer serializer;
     serializer.set_verbose(m_verbose);
-    return serializer.load(filename, *this, overwrite_symbols);
+    return serializer.loadFromFile(filename, *this, overwrite_symbols);
 }
 
 bool Executable::save_config(const char *filename) const
 {
     ExecutableSerializer serializer;
     serializer.set_verbose(m_verbose);
-    return serializer.save(filename, *this);
+    return serializer.saveToFile(filename, *this);
 }
 
 } // namespace unassemblize

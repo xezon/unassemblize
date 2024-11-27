@@ -7,35 +7,27 @@
 namespace unassemblize
 {
 
-class Executable; // Forward declaration
+class Executable;
 
 class ExecutableSerializer
 {
 public:
-    // Main interface
-    bool load(const std::string &filename, Executable &exe, bool overwrite_symbols = false);
-    bool save(const std::string &filename, const Executable &exe) const;
-
     void set_verbose(bool verbose) { m_verbose = verbose; }
+
+    // File I/O methods
+    bool load_config(const std::string &filename, Executable &exe, bool overwrite_symbols = false);
+    bool save_config(const std::string &filename, const Executable &exe) const;
+
+    // JSON methods
+    void load_json(const nlohmann::json &js, Executable &exe, bool overwrite_symbols = false);
+    void save_json(nlohmann::json &js, const Executable &exe) const;
 
 private:
     // JSON section keys
-    static constexpr const char *SYMBOL_SECTION = "symbols";
-    static constexpr const char *SECTIONS_SECTION = "sections";
-    static constexpr const char *CONFIG_SECTION = "config";
-    static constexpr const char *OBJECT_SECTION = "objects";
-
-    // Configuration loading methods
-    void loadConfig(const nlohmann::json &js, Executable &exe);
-    void loadSymbols(const nlohmann::json &js, Executable &exe, bool overwrite_symbols);
-    void loadSections(const nlohmann::json &js, Executable &exe);
-    void loadObjects(const nlohmann::json &js, Executable &exe);
-
-    // Configuration saving methods
-    void saveConfig(nlohmann::json &js, const Executable &exe) const;
-    void saveSymbols(nlohmann::json &js, const Executable &exe) const;
-    void saveSections(nlohmann::json &js, const Executable &exe) const;
-    void saveObjects(nlohmann::json &js, const Executable &exe) const;
+    static constexpr const char *EXE_CONFIG_SECTION = "exe_config";
+    static constexpr const char *EXE_SYMBOLS_SECTION = "exe_symbols";
+    static constexpr const char *EXE_SECTIONS_SECTION = "exe_sections";
+    static constexpr const char *EXE_OBJECTS_SECTION = "exe_objects";
 
     bool m_verbose = false;
 };
