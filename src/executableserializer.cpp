@@ -56,12 +56,7 @@ void ExecutableSerializer::load_json(const nlohmann::json &js, Executable &exe, 
         {
             printf("Loading config section...\n");
         }
-
-        const auto &config = js.at(EXE_CONFIG_SECTION);
-        config.at("codealign").get_to(exe.m_imageData.codeAlignment);
-        config.at("dataalign").get_to(exe.m_imageData.dataAlignment);
-        config.at("codepadding").get_to(exe.m_imageData.codePad);
-        config.at("datapadding").get_to(exe.m_imageData.dataPad);
+        js.at(EXE_CONFIG_SECTION).get_to(exe.m_imageData);
     }
 
     if (js.contains(EXE_SYMBOLS_SECTION))
@@ -70,15 +65,11 @@ void ExecutableSerializer::load_json(const nlohmann::json &js, Executable &exe, 
         {
             printf("Loading symbols section...\n");
         }
-
         const auto &symbols = js.at(EXE_SYMBOLS_SECTION);
         for (const auto &symbol : symbols)
         {
             ExeSymbol exeSymbol;
-            symbol.at("name").get_to(exeSymbol.name);
-            symbol.at("address").get_to(exeSymbol.address);
-            symbol.at("size").get_to(exeSymbol.size);
-
+            symbol.get_to(exeSymbol);
             if (!exeSymbol.name.empty() && exeSymbol.address != 0)
             {
                 exe.add_symbol(exeSymbol, overwrite_symbols);
@@ -152,23 +143,13 @@ void ExecutableSerializer::save_json(nlohmann::json &js, const Executable &exe) 
     {
         printf("Saving config section...\n");
     }
-    // Config section
-    js[EXE_CONFIG_SECTION] = {
-        {"codealign", exe.m_imageData.codeAlignment},
-        {"dataalign", exe.m_imageData.dataAlignment},
-        {"codepadding", exe.m_imageData.codePad},
-        {"datapadding", exe.m_imageData.dataPad}};
+    js[EXE_CONFIG_SECTION] = exe.m_imageData;
 
     if (m_verbose)
     {
         printf("Saving symbols section...\n");
     }
-    // Symbols section
-    auto &symbols = js[EXE_SYMBOLS_SECTION] = nlohmann::json::array();
-    for (const auto &symbol : exe.m_symbols)
-    {
-        symbols.push_back({{"name", symbol.name}, {"address", symbol.address}, {"size", symbol.size}});
-    }
+    js[EXE_SYMBOLS_SECTION] = exe.m_symbols;
 
     // Sections section
     auto &sections = js[EXE_SECTIONS_SECTION] = nlohmann::json::array();

@@ -15,6 +15,7 @@
 #include "commontypes.h"
 #include <list>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -75,5 +76,17 @@ struct ExeImageData
 using ExeSections = std::vector<ExeSectionInfo>;
 using ExeSymbols = std::vector<ExeSymbol>;
 using ExeObjects = std::vector<ExeObject>;
+
+void to_json(nlohmann::json &js, const ExeSymbol &d);
+void from_json(const nlohmann::json &js, ExeSymbol &d);
+
+void to_json(nlohmann::json &js, const ExeObjectSection &d);
+void from_json(const nlohmann::json &js, ExeObjectSection &d);
+
+void to_json(nlohmann::json &js, const ExeObject &d);
+void from_json(const nlohmann::json &js, ExeObject &d);
+
+void to_json(nlohmann::json &js, const ExeImageData &d);
+void from_json(const nlohmann::json &js, ExeImageData &d);
 
 } // namespace unassemblize

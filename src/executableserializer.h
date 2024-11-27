@@ -1,7 +1,6 @@
 #pragma once
 
 #include "executabletypes.h"
-#include <nlohmann/json.hpp>
 #include <string>
 
 namespace unassemblize
