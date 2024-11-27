@@ -362,7 +362,7 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading config section...\n");
         }
-        js.at(EXE_CONFIG_SECTION).get_to(exe.m_imageData);
+        js.at(EXE_CONFIG_SECTION).get_to(m_imageData);
     }
 
     if (js.contains(EXE_SYMBOLS_SECTION))
@@ -378,7 +378,7 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
             symbol.get_to(exeSymbol);
             if (!exeSymbol.name.empty() && exeSymbol.address != 0)
             {
-                exe.add_symbol(exeSymbol, overwrite_symbols);
+                add_symbol(exeSymbol, overwrite_symbols);
             }
         }
     }
@@ -397,7 +397,7 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
             if (name.empty())
                 continue;
 
-            ExeSectionInfo *sectionInfo = exe.find_section(name);
+            ExeSectionInfo *sectionInfo = find_section(name);
             if (!sectionInfo)
             {
                 if (m_verbose)
@@ -438,7 +438,7 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
                 section.at("size").get_to(objSection.size);
                 obj.sections.push_back(objSection);
             }
-            exe.m_targetObjects.push_back(obj);
+            m_targetObjects.push_back(obj);
         }
     }
 }
@@ -449,17 +449,17 @@ void Executable::save_json(nlohmann::json &js) const
     {
         printf("Saving config section...\n");
     }
-    js[EXE_CONFIG_SECTION] = exe.m_imageData;
+    js[EXE_CONFIG_SECTION] = m_imageData;
 
     if (m_verbose)
     {
         printf("Saving symbols section...\n");
     }
-    js[EXE_SYMBOLS_SECTION] = exe.m_symbols;
+    js[EXE_SYMBOLS_SECTION] = m_symbols;
 
     // Sections section
     auto &sections = js[EXE_SECTIONS_SECTION] = nlohmann::json::array();
-    for (const auto &section : exe.m_sections)
+    for (const auto &section : m_sections)
     {
         sections.push_back(
             {{"name", section.name},
@@ -470,7 +470,7 @@ void Executable::save_json(nlohmann::json &js) const
 
     // Objects section
     auto &objects = js[EXE_OBJECTS_SECTION] = nlohmann::json::array();
-    for (const auto &object : exe.m_targetObjects)
+    for (const auto &object : m_targetObjects)
     {
         nlohmann::json obj = {{"name", object.name}, {"sections", nlohmann::json::array()}};
         for (const auto &section : object.sections)
