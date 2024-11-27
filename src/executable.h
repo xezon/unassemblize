@@ -28,6 +28,8 @@ namespace unassemblize
 {
 class Executable
 {
+    friend class ExecutableSerializer;
+
 public:
     Executable();
     ~Executable();
@@ -69,15 +71,6 @@ public:
 
 private:
     ExeSectionInfo *find_section(const std::string &name);
-
-    void load_symbols(nlohmann::json &js, bool overwrite_symbols);
-    void dump_symbols(nlohmann::json &js) const;
-
-    void load_sections(nlohmann::json &js);
-    void dump_sections(nlohmann::json &js) const;
-
-    void load_objects(nlohmann::json &js);
-    void dump_objects(nlohmann::json &js) const;
 
 private:
     std::string m_exeFilename;
