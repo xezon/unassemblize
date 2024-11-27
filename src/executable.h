@@ -16,7 +16,7 @@
 #include "functiontypes.h"
 #include "pdbreadertypes.h"
 #include <memory>
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 #include <stdio.h>
 
 namespace LIEF
@@ -28,8 +28,6 @@ namespace unassemblize
 {
 class Executable
 {
-    friend class ExecutableSerializer;
-
 public:
     Executable();
     ~Executable();
@@ -71,6 +69,16 @@ public:
 
 private:
     ExeSectionInfo *find_section(const std::string &name);
+
+    // JSON handling methods
+    void load_json(const nlohmann::json &js, bool overwrite_symbols);
+    void save_json(nlohmann::json &js) const;
+
+    // JSON section keys
+    static constexpr const char *EXE_CONFIG_SECTION = "exe_config";
+    static constexpr const char *EXE_SYMBOLS_SECTION = "exe_symbols";
+    static constexpr const char *EXE_SECTIONS_SECTION = "exe_sections";
+    static constexpr const char *EXE_OBJECTS_SECTION = "exe_objects";
 
 private:
     std::string m_exeFilename;
