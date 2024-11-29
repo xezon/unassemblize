@@ -340,6 +340,7 @@ bool Executable::save_config(const char *filename) const
 
     nlohmann::json js;
     {
+        // Parse the config file if it already exists and update it
         std::ifstream fs(filename);
         if (!fs.fail())
         {
@@ -399,35 +400,49 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
 
 void Executable::save_json(nlohmann::json &js) const
 {
-    if (m_verbose)
+    // Don't overwrite if sections already exist
+    if (!js.contains(s_configSection))
     {
-        printf("Saving config section...\n");
+        if (m_verbose)
+        {
+            printf("Saving config section...\n");
+        }
+        js[s_configSection] = m_imageData;
     }
-    js[s_configSection] = m_imageData;
 
-    if (m_verbose)
+    if (!js.contains(s_symbolsSection))
     {
-        printf("Saving symbols section...\n");
+        if (m_verbose)
+        {
+            printf("Saving symbols section...\n");
+        }
+        js[s_symbolsSection] = m_symbols;
     }
-    js[s_symbolsSection] = m_symbols;
 
-    if (m_verbose)
+    if (!js.contains(s_sectionsSection))
     {
-        printf("Saving sections section...\n");
+        if (m_verbose)
+        {
+            printf("Saving sections section...\n");
+        }
+        js[s_sectionsSection] = m_sections;
     }
-    js[s_sectionsSection] = m_sections;
 
-    if (m_verbose)
+    if (!js.contains(s_objectsSection))
     {
-        printf("Saving objects section...\n");
+        if (m_verbose)
+        {
+            printf("Saving objects section...\n");
+        }
+        js[s_objectsSection] = m_targetObjects;
     }
-    js[s_objectsSection] = m_targetObjects;
 }
 
 void Executable::update_sections(const ExeSections &sections)
 {
     for (const auto &sectionInfo : sections)
     {
+        // Don't try to update empty sections
         if (sectionInfo.name.empty())
             continue;
 
