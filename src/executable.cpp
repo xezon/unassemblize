@@ -371,9 +371,9 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading symbols section...\n");
         }
-        std::vector<ExeSymbol> symbols;
-        js.at(s_symbolsSection).get_to(symbols);
-        add_symbols(symbols, overwrite_symbols);
+        ExeSymbols newSymbols;
+        js.at(s_symbolsSection).get_to(newSymbols);
+        add_symbols(newSymbols, overwrite_symbols);
     }
 
     if (js.contains(s_sectionsSection))
@@ -382,28 +382,9 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading sections info...\n");
         }
-        std::vector<ExeSectionInfo> sections;
+        ExeSections sections;
         js.at(s_sectionsSection).get_to(sections);
-
-        for (const auto &sectionInfo : sections)
-        {
-            if (sectionInfo.name.empty())
-                continue;
-
-            ExeSectionInfo *existingSection = find_section(sectionInfo.name);
-            if (!existingSection)
-            {
-                if (m_verbose)
-                {
-                    printf("Section '%s' not found in binary\n", sectionInfo.name.c_str());
-                }
-                continue;
-            }
-
-            existingSection->type = sectionInfo.type;
-            existingSection->address = sectionInfo.address;
-            existingSection->size = sectionInfo.size;
-        }
+        update_sections(sections);
     }
 
     if (js.contains(s_objectsSection))
@@ -441,6 +422,29 @@ void Executable::save_json(nlohmann::json &js) const
         printf("Saving objects section...\n");
     }
     js[s_objectsSection] = m_targetObjects;
+}
+
+void Executable::update_sections(const ExeSections &sections)
+{
+    for (const auto &sectionInfo : sections)
+    {
+        if (sectionInfo.name.empty())
+            continue;
+
+        ExeSectionInfo *existingSection = find_section(sectionInfo.name);
+        if (!existingSection)
+        {
+            if (m_verbose)
+            {
+                printf("Section '%s' not found in binary\n", sectionInfo.name.c_str());
+            }
+            continue;
+        }
+
+        existingSection->type = sectionInfo.type;
+        existingSection->address = sectionInfo.address;
+        existingSection->size = sectionInfo.size;
+    }
 }
 
 } // namespace unassemblize
