@@ -395,9 +395,9 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading objects section...\n");
         }
-        ExeObjects newObjects;
-        js.at(s_objectsSection).get_to(newObjects);
-        update_objects(newObjects);
+        ExeObjects objects;
+        js.at(s_objectsSection).get_to(objects);
+        m_targetObjects.insert(m_targetObjects.end(), objects.begin(), objects.end());
     }
 }
 
@@ -462,22 +462,6 @@ void Executable::update_sections(const ExeSections &sections)
         existingSection->type = sectionInfo.type;
         existingSection->address = sectionInfo.address;
         existingSection->size = sectionInfo.size;
-    }
-}
-
-void Executable::update_objects(const ExeObjects &objects)
-{
-    for (const auto &newObject : objects)
-    {
-        // Skip if object already exists
-        auto it = std::find_if(m_targetObjects.begin(), m_targetObjects.end(), [&](const ExeObject &obj) {
-            return obj.name == newObject.name;
-        });
-
-        if (it != m_targetObjects.end())
-            continue;
-
-        m_targetObjects.push_back(newObject);
     }
 }
 
