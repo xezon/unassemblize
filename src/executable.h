@@ -74,10 +74,10 @@ private:
     void save_json(nlohmann::json &js) const;
 
     // JSON section keys
-    static constexpr const char *s_configSection = "exe_config";
-    static constexpr const char *s_symbolsSection = "exe_symbols";
-    static constexpr const char *s_sectionsSection = "exe_sections";
-    static constexpr const char *s_objectsSection = "exe_objects";
+    static constexpr const char *s_configSection = "config";
+    static constexpr const char *s_symbolsSection = "symbols";
+    static constexpr const char *s_sectionsSection = "sections";
+    static constexpr const char *s_objectsSection = "objects";
 
 private:
     std::string m_exeFilename;
