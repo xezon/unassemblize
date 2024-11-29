@@ -89,4 +89,7 @@ void from_json(const nlohmann::json &js, ExeObject &d);
 void to_json(nlohmann::json &js, const ExeImageData &d);
 void from_json(const nlohmann::json &js, ExeImageData &d);
 
+void to_json(nlohmann::json &js, const ExeSectionInfo &d);
+void from_json(const nlohmann::json &js, ExeSectionInfo &d);
+
 } // namespace unassemblize

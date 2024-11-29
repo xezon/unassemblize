@@ -99,4 +99,18 @@ void from_json(const nlohmann::json &js, ExeImageData &d)
     js.at("datapadding").get_to(d.dataPad);
 }
 
+void to_json(nlohmann::json &js, const ExeSectionInfo &d)
+{
+    js = nlohmann::json{{"name", d.name}, {"type", to_string(d.type)}, {"address", d.address}, {"size", d.size}};
+}
+
+void from_json(const nlohmann::json &js, ExeSectionInfo &d)
+{
+    js.at("name").get_to(d.name);
+    std::string type = js.at("type").get<std::string>();
+    d.type = to_section_type(type.c_str());
+    js.at("address").get_to(d.address);
+    js.at("size").get_to(d.size);
+}
+
 } // namespace unassemblize

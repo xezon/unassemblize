@@ -371,16 +371,9 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading symbols section...\n");
         }
-        const auto &symbols = js.at(EXE_SYMBOLS_SECTION);
-        for (const auto &symbol : symbols)
-        {
-            ExeSymbol exeSymbol;
-            symbol.get_to(exeSymbol);
-            if (!exeSymbol.name.empty() && exeSymbol.address != 0)
-            {
-                add_symbol(exeSymbol, overwrite_symbols);
-            }
-        }
+        std::vector<ExeSymbol> symbols;
+        js.at(EXE_SYMBOLS_SECTION).get_to(symbols);
+        add_symbols(symbols, overwrite_symbols);
     }
 
     if (js.contains(EXE_SECTIONS_SECTION))
@@ -389,31 +382,27 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading sections info...\n");
         }
+        std::vector<ExeSectionInfo> sections;
+        js.at(EXE_SECTIONS_SECTION).get_to(sections);
 
-        const auto &sections = js.at(EXE_SECTIONS_SECTION);
-        for (const auto &section : sections)
+        for (const auto &sectionInfo : sections)
         {
-            std::string name = section.at("name").get<std::string>();
-            if (name.empty())
+            if (sectionInfo.name.empty())
                 continue;
 
-            ExeSectionInfo *sectionInfo = find_section(name);
-            if (!sectionInfo)
+            ExeSectionInfo *existingSection = find_section(sectionInfo.name);
+            if (!existingSection)
             {
                 if (m_verbose)
                 {
-                    printf("Section '%s' not found in binary\n", name.c_str());
+                    printf("Section '%s' not found in binary\n", sectionInfo.name.c_str());
                 }
                 continue;
             }
 
-            std::string type = section.at("type").get<std::string>();
-            sectionInfo->type = to_section_type(type.c_str());
-
-            if (section.contains("address"))
-                section.at("address").get_to(sectionInfo->address);
-            if (section.contains("size"))
-                section.at("size").get_to(sectionInfo->size);
+            existingSection->type = sectionInfo.type;
+            existingSection->address = sectionInfo.address;
+            existingSection->size = sectionInfo.size;
         }
     }
 
@@ -423,23 +412,7 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading objects section...\n");
         }
-
-        const auto &objects = js.at(EXE_OBJECTS_SECTION);
-        for (const auto &object : objects)
-        {
-            ExeObject obj;
-            object.at("name").get_to(obj.name);
-            const auto &sections = object.at("sections");
-            for (const auto &section : sections)
-            {
-                ExeObjectSection objSection;
-                section.at("name").get_to(objSection.name);
-                section.at("offset").get_to(objSection.offset);
-                section.at("size").get_to(objSection.size);
-                obj.sections.push_back(objSection);
-            }
-            m_targetObjects.push_back(obj);
-        }
+        js.at(EXE_OBJECTS_SECTION).get_to(m_targetObjects);
     }
 }
 
@@ -457,28 +430,17 @@ void Executable::save_json(nlohmann::json &js) const
     }
     js[EXE_SYMBOLS_SECTION] = m_symbols;
 
-    // Sections section
-    auto &sections = js[EXE_SECTIONS_SECTION] = nlohmann::json::array();
-    for (const auto &section : m_sections)
+    if (m_verbose)
     {
-        sections.push_back(
-            {{"name", section.name},
-             {"type", to_string(section.type)},
-             {"address", section.address},
-             {"size", section.size}});
+        printf("Saving sections section...\n");
     }
+    js[EXE_SECTIONS_SECTION] = m_sections;
 
-    // Objects section
-    auto &objects = js[EXE_OBJECTS_SECTION] = nlohmann::json::array();
-    for (const auto &object : m_targetObjects)
+    if (m_verbose)
     {
-        nlohmann::json obj = {{"name", object.name}, {"sections", nlohmann::json::array()}};
-        for (const auto &section : object.sections)
-        {
-            obj["sections"].push_back({{"name", section.name}, {"offset", section.offset}, {"size", section.size}});
-        }
-        objects.push_back(obj);
+        printf("Saving objects section...\n");
     }
+    js[EXE_OBJECTS_SECTION] = m_targetObjects;
 }
 
 } // namespace unassemblize
