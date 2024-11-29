@@ -356,34 +356,34 @@ bool Executable::save_config(const char *filename) const
 
 void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
 {
-    if (js.contains(EXE_CONFIG_SECTION))
+    if (js.contains(s_configSection))
     {
         if (m_verbose)
         {
             printf("Loading config section...\n");
         }
-        js.at(EXE_CONFIG_SECTION).get_to(m_imageData);
+        js.at(s_configSection).get_to(m_imageData);
     }
 
-    if (js.contains(EXE_SYMBOLS_SECTION))
+    if (js.contains(s_symbolsSection))
     {
         if (m_verbose)
         {
             printf("Loading symbols section...\n");
         }
         std::vector<ExeSymbol> symbols;
-        js.at(EXE_SYMBOLS_SECTION).get_to(symbols);
+        js.at(s_symbolsSection).get_to(symbols);
         add_symbols(symbols, overwrite_symbols);
     }
 
-    if (js.contains(EXE_SECTIONS_SECTION))
+    if (js.contains(s_sectionsSection))
     {
         if (m_verbose)
         {
             printf("Loading sections info...\n");
         }
         std::vector<ExeSectionInfo> sections;
-        js.at(EXE_SECTIONS_SECTION).get_to(sections);
+        js.at(s_sectionsSection).get_to(sections);
 
         for (const auto &sectionInfo : sections)
         {
@@ -406,13 +406,13 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         }
     }
 
-    if (js.contains(EXE_OBJECTS_SECTION))
+    if (js.contains(s_objectsSection))
     {
         if (m_verbose)
         {
             printf("Loading objects section...\n");
         }
-        js.at(EXE_OBJECTS_SECTION).get_to(m_targetObjects);
+        js.at(s_objectsSection).get_to(m_targetObjects);
     }
 }
 
@@ -422,25 +422,25 @@ void Executable::save_json(nlohmann::json &js) const
     {
         printf("Saving config section...\n");
     }
-    js[EXE_CONFIG_SECTION] = m_imageData;
+    js[s_configSection] = m_imageData;
 
     if (m_verbose)
     {
         printf("Saving symbols section...\n");
     }
-    js[EXE_SYMBOLS_SECTION] = m_symbols;
+    js[s_symbolsSection] = m_symbols;
 
     if (m_verbose)
     {
         printf("Saving sections section...\n");
     }
-    js[EXE_SECTIONS_SECTION] = m_sections;
+    js[s_sectionsSection] = m_sections;
 
     if (m_verbose)
     {
         printf("Saving objects section...\n");
     }
-    js[EXE_OBJECTS_SECTION] = m_targetObjects;
+    js[s_objectsSection] = m_targetObjects;
 }
 
 } // namespace unassemblize

@@ -15,7 +15,7 @@
 #include "commontypes.h"
 #include <list>
 #include <map>
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>

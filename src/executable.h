@@ -16,7 +16,6 @@
 #include "functiontypes.h"
 #include "pdbreadertypes.h"
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <stdio.h>
 
 namespace LIEF
@@ -75,10 +74,10 @@ private:
     void save_json(nlohmann::json &js) const;
 
     // JSON section keys
-    static constexpr const char *EXE_CONFIG_SECTION = "exe_config";
-    static constexpr const char *EXE_SYMBOLS_SECTION = "exe_symbols";
-    static constexpr const char *EXE_SECTIONS_SECTION = "exe_sections";
-    static constexpr const char *EXE_OBJECTS_SECTION = "exe_objects";
+    static constexpr const char *s_configSection = "exe_config";
+    static constexpr const char *s_symbolsSection = "exe_symbols";
+    static constexpr const char *s_sectionsSection = "exe_sections";
+    static constexpr const char *s_objectsSection = "exe_objects";
 
 private:
     std::string m_exeFilename;

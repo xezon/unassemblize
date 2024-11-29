@@ -12,6 +12,7 @@
  */
 #include "executabletypes.h"
 #include "util.h"
+#include <nlohmann/json.hpp>
 
 namespace unassemblize
 {
