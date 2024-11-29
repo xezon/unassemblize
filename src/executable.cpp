@@ -290,7 +290,8 @@ void Executable::add_symbols(const PdbSymbolInfoVector &symbols, bool overwrite)
 
 void Executable::add_symbol(const ExeSymbol &symbol, bool overwrite)
 {
-    if (symbol.address == 0)
+    // Skip invalid symbols (empty name or zero address)
+    if (symbol.address == 0 || symbol.name.empty())
         return;
 
     Address64ToIndexMapT::iterator it = m_symbolAddressToIndexMap.find(symbol.address);
@@ -394,7 +395,9 @@ void Executable::load_json(const nlohmann::json &js, bool overwrite_symbols)
         {
             printf("Loading objects section...\n");
         }
-        js.at(s_objectsSection).get_to(m_targetObjects);
+        ExeObjects newObjects;
+        js.at(s_objectsSection).get_to(newObjects);
+        update_objects(newObjects);
     }
 }
 
@@ -459,6 +462,22 @@ void Executable::update_sections(const ExeSections &sections)
         existingSection->type = sectionInfo.type;
         existingSection->address = sectionInfo.address;
         existingSection->size = sectionInfo.size;
+    }
+}
+
+void Executable::update_objects(const ExeObjects &objects)
+{
+    for (const auto &newObject : objects)
+    {
+        // Skip if object already exists
+        auto it = std::find_if(m_targetObjects.begin(), m_targetObjects.end(), [&](const ExeObject &obj) {
+            return obj.name == newObject.name;
+        });
+
+        if (it != m_targetObjects.end())
+            continue;
+
+        m_targetObjects.push_back(newObject);
     }
 }
 

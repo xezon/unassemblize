@@ -68,6 +68,8 @@ public:
 
 private:
     ExeSectionInfo *find_section(const std::string &name);
+    void update_sections(const ExeSections &sections);
+    void update_objects(const ExeObjects &objects);
 
     // JSON handling methods
     void load_json(const nlohmann::json &js, bool overwrite_symbols);
