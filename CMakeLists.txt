@@ -194,13 +194,14 @@ target_sources(unassemblize PRIVATE
 
 # Platform-specific configurations
 if(WINDOWS)
+    find_package(DirectX REQUIRED)
     target_sources(unassemblize PRIVATE
         src/imguiclient/imguiwin32.cpp
         src/imguiclient/imguiwin32.h
     )
     
     target_link_libraries(unassemblize PRIVATE
-        d3d9.lib # TODO: figure out if any "FindDirectX" logic is needed here.
+        DirectX::D3D9
         imgui_win32
         ${DIASDK_LIBRARIES}
     )

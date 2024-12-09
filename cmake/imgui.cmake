@@ -23,6 +23,7 @@ set(IMGUI_HEADERS
 )
 
 if(WINDOWS)
+    find_package(DirectX REQUIRED)
     add_library(imgui_win32 STATIC ${IMGUI_SOURCES}
         ${IMGUI_DIR}/backends/imgui_impl_dx9.cpp
         ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
@@ -46,8 +47,7 @@ if(WINDOWS)
         ${IMGUI_DIR}/backends
     )
 
-    # Windows uses DirectX, no need for OpenGL
-    target_link_libraries(imgui_win32 PRIVATE d3d9)
+    target_link_libraries(imgui_win32 PRIVATE DirectX::D3D9)
     set(IMGUI_LIBRARY imgui_win32)
 else()
     # Linux and macOS use OpenGL3
