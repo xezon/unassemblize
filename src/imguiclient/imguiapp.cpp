@@ -1646,7 +1646,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_exeConfigFilenameCopy = descriptor->m_exeConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-            -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
+                -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
     }
 
     if (descriptor->can_save_pdb_config())
@@ -1654,7 +1654,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_pdbConfigFilenameCopy = descriptor->m_pdbConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-            -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
+                -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
     }
 
     assert(head_command.next_delayed_command != nullptr);
@@ -2391,10 +2391,36 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
         // Change text color too to make it readable with the light ImGui color theme.
         ImScoped::StyleColor text_color1(ImGuiCol_Text, ImVec4(1.00f, 1.00f, 1.00f, 1.00f));
         ImScoped::StyleColor text_color2(ImGuiCol_TextDisabled, ImVec4(0.50f, 0.50f, 0.50f, 1.00f));
-        erased = ImGui::Button("Remove");
 
-        // #TODO: Guard this button press with a confirmation dialog ?
-        // There is an example for this in "Dear ImGui Demo" > "Popups & Modal windows" > "Modals".
+        if (ImGui::Button("Remove"))
+        {
+            ImGui::OpenPopup("Remove File?");
+        }
+
+        // Center the modal popup
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Are you sure you want to remove this file?\nThis operation cannot be undone!\n\n");
+            ImGui::Separator();
+
+            // #TODO: Add "Don't ask me next time" checkbox with persistent state
+
+            if (ImGui::Button("OK", ImVec2(120, 0)))
+            {
+                erased = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     ImGui::SameLine();
@@ -2412,6 +2438,7 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
             load_async(&descriptor);
         }
     }
+
     ImGui::SameLine();
     {
         ImScoped::Disabled disabled(!descriptor.can_save_config());
