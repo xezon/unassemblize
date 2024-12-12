@@ -2384,26 +2384,28 @@ void ImGuiApp::ShowRemoveFileConfirmationPopup(bool &erased)
 {
     // Center the modal popup
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::TextUnformatted(
-            "Are you sure you want to remove this file from the list?\nIt does not delete it from disk.\n\n");
+        ImGui::TextWrapped("Are you sure you want to remove this file from the list? It does not delete it from disk.");
+        ImGui::Spacing(); // Add some space between the text and buttons
 
-        // #TODO: Add "Don't ask me next time" checkbox with persistent state
-
-        if (ImGui::Button("OK", ImVec2(120, 0)))
+        // Center the buttons
+        ImVec2 buttonSize(120, 0); // Width of 120, height auto
+        float buttonWidth = ImGui::GetContentRegionAvail().x; // Get available width
+        if (ImGui::Button("OK", buttonSize))
         {
             erased = true;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SetItemDefaultFocus();
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        if (ImGui::Button("Cancel", buttonSize))
         {
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
