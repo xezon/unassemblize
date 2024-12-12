@@ -2380,6 +2380,36 @@ void ImGuiApp::FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor)
     }
 }
 
+void ShowRemoveFileConfirmationPopup(bool &erased)
+{
+    ImGui::OpenPopup("Remove File?");
+
+    // Center the modal popup
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted(
+            "Are you sure you want to remove this file from the list?\nIt does not delete it from disk.\n\n");
+
+        // #TODO: Add "Don't ask me next time" checkbox with persistent state
+
+        if (ImGui::Button("OK", ImVec2(120, 0)))
+        {
+            erased = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SetItemDefaultFocus();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, bool &erased)
 {
     // Action buttons
@@ -2394,32 +2424,7 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
 
         if (ImGui::Button("Remove"))
         {
-            ImGui::OpenPopup("Remove File?");
-        }
-
-        // Center the modal popup
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::Text("Are you sure you want to remove this file?\nThis operation cannot be undone!\n\n");
-            ImGui::Separator();
-
-            // #TODO: Add "Don't ask me next time" checkbox with persistent state
-
-            if (ImGui::Button("OK", ImVec2(120, 0)))
-            {
-                erased = true;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SetItemDefaultFocus();
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
-            {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
+            ShowRemoveFileConfirmationPopup(erased);
         }
     }
 
