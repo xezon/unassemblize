@@ -2380,10 +2380,8 @@ void ImGuiApp::FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor)
     }
 }
 
-void ShowRemoveFileConfirmationPopup(bool &erased)
+void ImGuiApp::ShowRemoveFileConfirmationPopup(bool &erased)
 {
-    ImGui::OpenPopup("Remove File?");
-
     // Center the modal popup
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -2424,8 +2422,9 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
 
         if (ImGui::Button("Remove"))
         {
-            ShowRemoveFileConfirmationPopup(erased);
+            ImGui::OpenPopup("Remove File?");
         }
+        ShowRemoveFileConfirmationPopup(erased);
     }
 
     ImGui::SameLine();
