@@ -11,7 +11,7 @@
  *            LICENSE
  */
 #pragma once
-#include "imgui_text_filter.h"
+
 #include <functional>
 #include <imgui.h>
 #include <string_view>

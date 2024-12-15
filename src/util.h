@@ -107,6 +107,30 @@ bool push_back_unique(Container &container, const Value &value)
     return true;
 }
 
+template<typename Container, typename Value>
+bool find_and_erase(Container &container, const Value &value)
+{
+    Container::iterator it = std::find(container.begin(), container.end(), value);
+    if (it != container.end())
+    {
+        container.erase(it);
+        return true;
+    }
+    return false;
+}
+
+template<typename Container, typename UnaryPred>
+bool find_and_erase_if(Container &container, UnaryPred pred)
+{
+    Container::iterator it = std::find_if(container.begin(), container.end(), pred);
+    if (it != container.end())
+    {
+        container.erase(it);
+        return true;
+    }
+    return false;
+}
+
 template<typename SharedMutex>
 class shared_lock_guard // Alias read_lock_guard
 {

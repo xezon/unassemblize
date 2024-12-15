@@ -12,1014 +12,14 @@
  */
 #include "imguiapp.h"
 #include "executable.h"
-#include "options.h"
 #include "pdbreader.h"
-#include "util.h"
 #include "utility/imgui_scoped.h"
-#include <algorithm>
 #include <filesystem>
 #include <fmt/core.h>
 #include <misc/cpp/imgui_stdlib.h>
-#include <unordered_set>
 
 namespace unassemblize::gui
 {
-ImGuiApp::ProgramFileId ImGuiApp::ProgramFileDescriptor::s_id = 1;
-ImGuiApp::ProgramFileRevisionId ImGuiApp::ProgramFileRevisionDescriptor::s_id = 1;
-ImGuiApp::ProgramComparisonId ImGuiApp::ProgramComparisonDescriptor::s_id = 1;
-
-void ImGuiApp::ProcessedState::init(size_t maxItemsCount)
-{
-    m_processedItems.reserve(maxItemsCount);
-    const size_t bitsSize = maxItemsCount / 8 + 1;
-    m_processedItemStates = std::make_unique<uint8_t[]>(bitsSize);
-    std::fill_n(m_processedItemStates.get(), bitsSize, 0);
-}
-
-bool ImGuiApp::ProcessedState::set_item_processed(IndexT index)
-{
-    assert(index < m_processedItems.capacity());
-
-    const IndexT bitIndex = index / 8;
-    const uint8_t bitField = (1 << (index % 8));
-
-    if (m_processedItemStates[bitIndex] & bitField)
-        return false;
-
-    m_processedItems.push_back(index);
-    m_processedItemStates[bitIndex] |= bitField;
-    return true;
-}
-
-size_t ImGuiApp::ProcessedState::get_processed_item_count() const
-{
-    return m_processedItems.size();
-}
-
-span<const IndexT> ImGuiApp::ProcessedState::get_processed_items(size_t begin, size_t end) const
-{
-    assert(begin <= end);
-    assert(end <= m_processedItems.size());
-
-    return span<const IndexT>{m_processedItems.data() + begin, m_processedItems.data() + end};
-}
-
-span<const IndexT> ImGuiApp::ProcessedState::get_items_for_processing(span<const IndexT> items)
-{
-    const size_t begin = get_processed_item_count();
-
-    for (IndexT index : items)
-    {
-        set_item_processed(index);
-    }
-
-    const size_t end = get_processed_item_count();
-    return get_processed_items(begin, end);
-}
-
-ImGuiApp::ProgramFileDescriptor::ProgramFileDescriptor() : m_id(s_id++)
-{
-}
-
-ImGuiApp::ProgramFileDescriptor::~ProgramFileDescriptor()
-{
-}
-
-bool ImGuiApp::ProgramFileDescriptor::has_active_command() const
-{
-    return get_active_command_id() != InvalidWorkQueueCommandId;
-}
-
-WorkQueueCommandId ImGuiApp::ProgramFileDescriptor::get_active_command_id() const
-{
-    if (m_revisionDescriptor != nullptr && m_revisionDescriptor->has_active_command())
-    {
-        switch (m_revisionDescriptor->m_workReason)
-        {
-            case ProgramFileRevisionDescriptor::WorkReason::Load:
-            case ProgramFileRevisionDescriptor::WorkReason::SaveConfig:
-                return m_revisionDescriptor->get_active_command_id();
-            case ProgramFileRevisionDescriptor::WorkReason::BuildNamedFunctions:
-            default:
-                break;
-        }
-    }
-
-    return InvalidWorkQueueCommandId;
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_load_exe() const
-{
-    return !evaluate_exe_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_load_pdb() const
-{
-    return !m_pdbFilename.empty();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_load() const
-{
-    return can_load_exe() || can_load_pdb();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_save_exe_config() const
-{
-    return exe_loaded() && !evaluate_exe_config_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_save_pdb_config() const
-{
-    return pdb_loaded() && !evaluate_pdb_config_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::can_save_config() const
-{
-    return can_save_exe_config() || can_save_pdb_config();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::exe_loaded() const
-{
-    return m_revisionDescriptor != nullptr && m_revisionDescriptor->exe_loaded();
-}
-
-bool ImGuiApp::ProgramFileDescriptor::pdb_loaded() const
-{
-    return m_revisionDescriptor != nullptr && m_revisionDescriptor->pdb_loaded();
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::evaluate_exe_filename() const
-{
-    if (is_auto_str(m_exeFilename))
-    {
-        if (m_revisionDescriptor != nullptr)
-            return m_revisionDescriptor->m_exeFilenameFromPdb;
-        else
-            return std::string();
-    }
-    else
-    {
-        return m_exeFilename;
-    }
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::evaluate_exe_config_filename() const
-{
-    return ::get_config_file_name(evaluate_exe_filename(), m_exeConfigFilename);
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::evaluate_pdb_config_filename() const
-{
-    return ::get_config_file_name(m_pdbFilename, m_pdbConfigFilename);
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::create_short_exe_name() const
-{
-    std::string name;
-    if (m_revisionDescriptor != nullptr)
-    {
-        name = m_revisionDescriptor->create_short_exe_name();
-    }
-    else
-    {
-        name = evaluate_exe_filename();
-        if (name.empty())
-            name = m_exeFilename;
-    }
-    std::filesystem::path path(name);
-    return path.filename().string();
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::create_descriptor_name() const
-{
-    return fmt::format("File:{:d}", m_id);
-}
-
-std::string ImGuiApp::ProgramFileDescriptor::create_descriptor_name_with_file_info() const
-{
-    std::string revision;
-    ProgramFileRevisionId revisionId = get_revision_id();
-    if (revisionId != InvalidId)
-    {
-        revision = fmt::format(" - Revision:{:d}", revisionId);
-    }
-
-    const std::string name = create_short_exe_name();
-    if (name.empty())
-    {
-        return create_descriptor_name();
-    }
-    else
-    {
-        return fmt::format("File:{:d}{:s} - {:s}", m_id, revision, name);
-    }
-}
-
-ImGuiApp::ProgramFileRevisionId ImGuiApp::ProgramFileDescriptor::get_revision_id() const
-{
-    if (m_revisionDescriptor != nullptr)
-        return m_revisionDescriptor->m_id;
-    else
-        return InvalidId;
-}
-
-void ImGuiApp::ProgramFileDescriptor::create_new_revision_descriptor()
-{
-    m_exeSymbolsFilter.reset();
-    m_pdbSymbolsFilter.reset();
-    m_pdbFunctionsFilter.reset();
-
-    m_revisionDescriptor = std::make_shared<ProgramFileRevisionDescriptor>();
-    m_revisionDescriptor->m_exeFilenameCopy = m_exeFilename;
-    m_revisionDescriptor->m_exeConfigFilenameCopy = m_exeConfigFilename;
-    m_revisionDescriptor->m_pdbFilenameCopy = m_pdbFilename;
-    m_revisionDescriptor->m_pdbConfigFilenameCopy = m_pdbConfigFilename;
-}
-
-ImGuiApp::ProgramFileRevisionDescriptor::ProgramFileRevisionDescriptor() : m_id(s_id++)
-{
-}
-
-ImGuiApp::ProgramFileRevisionDescriptor::~ProgramFileRevisionDescriptor()
-{
-}
-
-void ImGuiApp::ProgramFileRevisionDescriptor::invalidate_command_id()
-{
-    m_activeCommandId = InvalidWorkQueueCommandId;
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::has_active_command() const
-{
-    return m_activeCommandId != InvalidWorkQueueCommandId;
-}
-
-WorkQueueCommandId ImGuiApp::ProgramFileRevisionDescriptor::get_active_command_id() const
-{
-    return m_activeCommandId;
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::can_load_exe() const
-{
-    return !evaluate_exe_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::can_load_pdb() const
-{
-    return !m_pdbFilenameCopy.empty();
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::can_save_exe_config() const
-{
-    return exe_loaded() && !evaluate_exe_config_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::can_save_pdb_config() const
-{
-    return pdb_loaded() && !evaluate_pdb_config_filename().empty();
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::exe_loaded() const
-{
-    return m_executable != nullptr;
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::pdb_loaded() const
-{
-    return m_pdbReader != nullptr;
-}
-
-bool ImGuiApp::ProgramFileRevisionDescriptor::named_functions_built() const
-{
-    return m_namedFunctionsBuilt;
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::evaluate_exe_filename() const
-{
-    if (is_auto_str(m_exeFilenameCopy))
-    {
-        return m_exeFilenameFromPdb;
-    }
-    else
-    {
-        return m_exeFilenameCopy;
-    }
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::evaluate_exe_config_filename() const
-{
-    return ::get_config_file_name(evaluate_exe_filename(), m_exeConfigFilenameCopy);
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::evaluate_pdb_config_filename() const
-{
-    return ::get_config_file_name(m_pdbFilenameCopy, m_pdbConfigFilenameCopy);
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::create_short_exe_name() const
-{
-    std::string name;
-    if (m_executable != nullptr)
-    {
-        name = m_executable->get_filename();
-    }
-    else
-    {
-        name = evaluate_exe_filename();
-        if (name.empty())
-            name = m_exeFilenameCopy;
-    }
-    std::filesystem::path path(name);
-    return path.filename().string();
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::create_descriptor_name() const
-{
-    return fmt::format("Revision:{:d}", m_id);
-}
-
-std::string ImGuiApp::ProgramFileRevisionDescriptor::create_descriptor_name_with_file_info() const
-{
-    const std::string name = create_short_exe_name();
-    if (name.empty())
-    {
-        return create_descriptor_name();
-    }
-    else
-    {
-        return fmt::format("Revision:{:d} - {:s}", m_id, name);
-    }
-}
-
-ImGuiApp::ProgramComparisonDescriptor::ProgramComparisonDescriptor() : m_id(s_id++)
-{
-}
-
-ImGuiApp::ProgramComparisonDescriptor::~ProgramComparisonDescriptor()
-{
-}
-
-ImGuiApp::ProgramComparisonDescriptor::File::File()
-{
-    for (ImGuiSelectionBasicStorage &selection : m_imguiBundlesSelectionArray)
-    {
-        selection.SetItemSelected(ImGuiID(0), true);
-    }
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::ListItemUiInfo::update_info(
-    const std::string &itemName,
-    uint32_t itemId,
-    bool hasMatchedFunction,
-    std::optional<int8_t> similarity)
-{
-    const bool similarityValueChanged = similarity.has_value() && m_similarity != similarity;
-
-    if (m_label.empty() || similarityValueChanged)
-    {
-        if (hasMatchedFunction)
-        {
-            if (similarity.has_value())
-            {
-                m_label = fmt::format("[M:{:d}%] {:s}##item{:d}", similarity.value(), itemName, itemId);
-            }
-            else
-            {
-                m_label = fmt::format("[M] {:s}##item{:d}", itemName, itemId);
-            }
-        }
-        else
-        {
-            m_label = fmt::format("{:s}##item{:d}", itemName, itemId);
-        }
-
-        m_similarity = similarity;
-    }
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::prepare_rebuild()
-{
-    m_bundlesFilter.reset();
-    m_functionIndicesFilter.reset();
-
-    m_revisionDescriptor.reset();
-
-    util::free_container(m_namedFunctionMatchInfos);
-    util::free_container(m_compilandBundles);
-    util::free_container(m_sourceFileBundles);
-    m_singleBundle = NamedFunctionBundle();
-
-    util::free_container(m_namedFunctionUiInfos);
-    util::free_container(m_compilandBundleUiInfos);
-    util::free_container(m_sourceFileBundleUiInfos);
-    m_singleBundleUiInfo = NamedFunctionBundleUiInfo();
-
-    m_compilandBundlesBuilt = TriState::False;
-    m_sourceFileBundlesBuilt = TriState::False;
-    m_singleBundleBuilt = false;
-
-    util::free_container(m_selectedBundles);
-    util::free_container(m_activeNamedFunctionIndices);
-    util::free_container(m_selectedNamedFunctionIndices);
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::init()
-{
-    assert(named_functions_built());
-
-    m_namedFunctionUiInfos.resize(m_revisionDescriptor->m_namedFunctions.size());
-    m_compilandBundleUiInfos.resize(m_compilandBundles.size());
-    m_sourceFileBundleUiInfos.resize(m_sourceFileBundles.size());
-
-    for (IndexT i = 0; i < IndexT(MatchBundleType::Count); ++i)
-    {
-        update_bundle_ui_infos(MatchBundleType(i));
-    }
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::invalidate_command_id()
-{
-    m_activeCommandId = InvalidWorkQueueCommandId;
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::has_active_command() const
-{
-    return get_active_command_id() != InvalidWorkQueueCommandId;
-}
-
-WorkQueueCommandId ImGuiApp::ProgramComparisonDescriptor::File::get_active_command_id() const
-{
-    if (m_revisionDescriptor != nullptr && m_revisionDescriptor->has_active_command())
-    {
-        switch (m_revisionDescriptor->m_workReason)
-        {
-            case ProgramFileRevisionDescriptor::WorkReason::Load:
-            case ProgramFileRevisionDescriptor::WorkReason::BuildNamedFunctions:
-            case ProgramFileRevisionDescriptor::WorkReason::DisassembleSelectedFunctions:
-            case ProgramFileRevisionDescriptor::WorkReason::BuildSourceLinesForSelectedFunctions:
-            case ProgramFileRevisionDescriptor::WorkReason::LoadSourceFilesForSelectedFunctions:
-                return m_revisionDescriptor->get_active_command_id();
-            case ProgramFileRevisionDescriptor::WorkReason::SaveConfig:
-            default:
-                break;
-        }
-    }
-
-    return m_activeCommandId;
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::exe_loaded() const
-{
-    return m_revisionDescriptor != nullptr && m_revisionDescriptor->exe_loaded();
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::pdb_loaded() const
-{
-    return m_revisionDescriptor != nullptr && m_revisionDescriptor->pdb_loaded();
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::named_functions_built() const
-{
-    return m_revisionDescriptor != nullptr && m_revisionDescriptor->named_functions_built();
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::bundles_ready() const
-{
-    return m_compilandBundlesBuilt != TriState::False && m_sourceFileBundlesBuilt != TriState::False && m_singleBundleBuilt;
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::File::is_matched_function(IndexT namedFunctionIndex) const
-{
-    assert(namedFunctionIndex < m_namedFunctionMatchInfos.size());
-    return m_namedFunctionMatchInfos[namedFunctionIndex].is_matched();
-}
-
-MatchBundleType ImGuiApp::ProgramComparisonDescriptor::File::get_selected_bundle_type() const
-{
-    static_assert(MatchBundleType::Compiland == MatchBundleType(0), "Unexpected value");
-    static_assert(MatchBundleType::SourceFile == MatchBundleType(1), "Unexpected value");
-
-    int index = 0;
-
-    if (m_compilandBundlesBuilt == TriState::True)
-    {
-        if (index++ == m_imguiSelectedBundleTypeIdx)
-            return MatchBundleType::Compiland;
-    }
-
-    if (m_sourceFileBundlesBuilt == TriState::True)
-    {
-        if (index++ == m_imguiSelectedBundleTypeIdx)
-            return MatchBundleType::SourceFile;
-    }
-
-    return MatchBundleType::None;
-}
-
-span<const NamedFunctionBundle> ImGuiApp::ProgramComparisonDescriptor::File::get_bundles(MatchBundleType type) const
-{
-    span<const NamedFunctionBundle> bundles;
-    switch (type)
-    {
-        case MatchBundleType::Compiland:
-            bundles = {m_compilandBundles};
-            break;
-        case MatchBundleType::SourceFile:
-            bundles = {m_sourceFileBundles};
-            break;
-        case MatchBundleType::None:
-            bundles = {&m_singleBundle, 1};
-            break;
-    }
-    static_assert(size_t(MatchBundleType::Count) == 3, "Enum was changed. Update switch case.");
-
-    return bundles;
-}
-
-span<ImGuiApp::ProgramComparisonDescriptor::File::NamedFunctionBundleUiInfo> ImGuiApp::ProgramComparisonDescriptor::File::
-    get_bundle_ui_infos(MatchBundleType type)
-{
-    span<NamedFunctionBundleUiInfo> bundle_ui_infos;
-    switch (type)
-    {
-        case MatchBundleType::Compiland:
-            bundle_ui_infos = {m_compilandBundleUiInfos};
-            break;
-        case MatchBundleType::SourceFile:
-            bundle_ui_infos = {m_sourceFileBundleUiInfos};
-            break;
-        case MatchBundleType::None:
-            bundle_ui_infos = {&m_singleBundleUiInfo, 1};
-            break;
-    }
-    static_assert(size_t(MatchBundleType::Count) == 3, "Enum was changed. Update switch case.");
-
-    return bundle_ui_infos;
-}
-
-span<const ImGuiApp::ProgramComparisonDescriptor::File::NamedFunctionBundleUiInfo> ImGuiApp::ProgramComparisonDescriptor::
-    File::get_bundle_ui_infos(MatchBundleType type) const
-{
-    return const_cast<ImGuiApp::ProgramComparisonDescriptor::File *>(this)->get_bundle_ui_infos(type);
-}
-
-ImGuiSelectionBasicStorage &ImGuiApp::ProgramComparisonDescriptor::File::get_bundles_selection(MatchBundleType type)
-{
-    return m_imguiBundlesSelectionArray[size_t(type)];
-}
-
-const NamedFunctionBundle &ImGuiApp::ProgramComparisonDescriptor::File::get_filtered_bundle(int index) const
-{
-    return *m_bundlesFilter.filtered[index];
-}
-
-const ImGuiApp::ProgramComparisonDescriptor::File::NamedFunctionBundleUiInfo &ImGuiApp::ProgramComparisonDescriptor::File::
-    get_filtered_bundle_ui_info(int index) const
-{
-    const span<const NamedFunctionBundleUiInfo> bundleUiInfos = get_bundle_ui_infos(get_selected_bundle_type());
-    const IndexT bundleIndex = m_bundlesFilter.filtered[index]->id;
-    assert(bundleIndex < bundleUiInfos.size());
-    return bundleUiInfos[bundleIndex];
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::on_bundles_changed()
-{
-    m_bundlesFilter.reset();
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::on_bundles_interaction()
-{
-    m_functionIndicesFilter.reset();
-
-    update_selected_bundles();
-    update_active_functions();
-    update_named_function_ui_infos(get_active_named_function_indices());
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::update_bundle_ui_infos(MatchBundleType type)
-{
-    const NamedFunctions &namedFunctions = m_revisionDescriptor->m_namedFunctions;
-    const span<const NamedFunctionBundle> bundles = get_bundles(type);
-    const span<NamedFunctionBundleUiInfo> bundleUiInfos = get_bundle_ui_infos(type);
-    const IndexT bundleCount = bundles.size();
-    assert(bundleUiInfos.size() == bundleCount);
-
-    for (IndexT i = 0; i < bundleCount; ++i)
-    {
-        const NamedFunctionBundle &bundle = bundles[i];
-        NamedFunctionBundleUiInfo &uiInfo = bundleUiInfos[i];
-        const bool hasMatchedFunction = !bundle.matchedFunctionIndices.empty();
-
-        uiInfo.update_info(bundle.name, bundle.id, hasMatchedFunction);
-    }
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::update_selected_bundles()
-{
-    const MatchBundleType type = get_selected_bundle_type();
-    span<const NamedFunctionBundle> activeBundles = get_bundles(type);
-    ImGuiSelectionBasicStorage &selection = get_bundles_selection(type);
-
-    std::vector<const NamedFunctionBundle *> selectedBundles;
-    selectedBundles.reserve(selection.Size);
-
-    if (m_bundlesFilter.filtered.size() == activeBundles.size())
-    {
-        // Fast route. The filter contains all elements.
-        void *it = nullptr;
-        ImGuiID id;
-        while (selection.GetNextSelectedItem(&it, &id))
-        {
-            assert(IndexT(id) < activeBundles.size());
-            const NamedFunctionBundle *bundle = &activeBundles[IndexT(id)];
-            selectedBundles.push_back(bundle);
-        }
-    }
-    else
-    {
-        // Slow route. The filter does not contain all elements.
-        // Uses lookup set. Is much faster than linear search over elements.
-        const std::unordered_set<const NamedFunctionBundle *> filteredSet(
-            m_bundlesFilter.filtered.begin(),
-            m_bundlesFilter.filtered.end());
-
-        void *it = nullptr;
-        ImGuiID id;
-        while (selection.GetNextSelectedItem(&it, &id))
-        {
-            assert(IndexT(id) < activeBundles.size());
-            const NamedFunctionBundle *bundle = &activeBundles[IndexT(id)];
-
-            if (filteredSet.count(bundle) == 0)
-                continue;
-
-            selectedBundles.push_back(bundle);
-        }
-    }
-
-    m_selectedBundles = std::move(selectedBundles);
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::update_active_functions()
-{
-    std::vector<IndexT> activeAllNamedFunctions;
-
-    if (m_selectedBundles.size() > 1)
-    {
-#ifndef RELEASE
-        std::unordered_set<IndexT> activeAllNamedFunctionsSet;
-#endif
-        {
-            size_t activeAllNamedFunctionsCount = 0;
-
-            for (const NamedFunctionBundle *bundle : m_selectedBundles)
-            {
-                activeAllNamedFunctionsCount += bundle->allNamedFunctionIndices.size();
-            }
-            activeAllNamedFunctions.reserve(activeAllNamedFunctionsCount);
-#ifndef RELEASE
-            activeAllNamedFunctionsSet.reserve(activeAllNamedFunctionsCount);
-#endif
-        }
-
-        for (const NamedFunctionBundle *bundle : m_selectedBundles)
-        {
-            for (IndexT index : bundle->allNamedFunctionIndices)
-            {
-#ifndef RELEASE
-                assert(activeAllNamedFunctionsSet.count(index) == 0);
-                activeAllNamedFunctionsSet.emplace(index);
-#endif
-                activeAllNamedFunctions.push_back(index);
-            }
-        }
-    }
-    m_activeNamedFunctionIndices = std::move(activeAllNamedFunctions);
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::update_named_function_ui_infos(span<const IndexT> namedFunctionIndices)
-{
-    for (IndexT functionIndex : namedFunctionIndices)
-    {
-        const NamedFunction &namedFunction = m_revisionDescriptor->m_namedFunctions[functionIndex];
-        const NamedFunctionMatchInfo &matchInfo = m_namedFunctionMatchInfos[functionIndex];
-        ListItemUiInfo &uiInfo = m_namedFunctionUiInfos[functionIndex];
-
-        uiInfo.update_info(namedFunction.name, namedFunction.id, matchInfo.is_matched());
-    }
-}
-
-span<const IndexT> ImGuiApp::ProgramComparisonDescriptor::File::get_active_named_function_indices() const
-{
-    if (m_selectedBundles.size() == 1)
-    {
-        return span<const IndexT>{m_selectedBundles[0]->allNamedFunctionIndices};
-    }
-    else if (m_selectedBundles.size() > 1)
-    {
-        return span<const IndexT>{m_activeNamedFunctionIndices};
-    }
-    else
-    {
-        return span<const IndexT>{};
-    }
-}
-
-const NamedFunction &ImGuiApp::ProgramComparisonDescriptor::File::get_filtered_named_function(int index) const
-{
-    const auto &filtered = m_functionIndicesFilter.filtered;
-    assert(index < filtered.size());
-    return m_revisionDescriptor->m_namedFunctions[filtered[index]];
-}
-
-const NamedFunctionMatchInfo &ImGuiApp::ProgramComparisonDescriptor::File::get_filtered_named_function_match_info(
-    int index) const
-{
-    const auto &filtered = m_functionIndicesFilter.filtered;
-    assert(index < filtered.size());
-    return m_namedFunctionMatchInfos[filtered[index]];
-}
-
-const ImGuiApp::ProgramComparisonDescriptor::File::NamedFunctionUiInfo &ImGuiApp::ProgramComparisonDescriptor::File::
-    get_filtered_named_function_ui_info(int index) const
-{
-    const auto &filtered = m_functionIndicesFilter.filtered;
-    assert(index < filtered.size());
-    return m_namedFunctionUiInfos[filtered[index]];
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::File::update_selected_named_functions()
-{
-    assert(named_functions_built());
-
-    std::vector<IndexT> selectedAllNamedFunctionIndices;
-
-    // Reservation size typically matches selection size, but could be larger.
-    selectedAllNamedFunctionIndices.reserve(m_imguiFunctionsSelection.Size);
-
-    const span<const IndexT> activeNamedFunctionIndices = get_active_named_function_indices();
-
-    if (m_functionIndicesFilter.filtered.size() == activeNamedFunctionIndices.size())
-    {
-        // Fast route. The filter contains all elements.
-        void *it = nullptr;
-        ImGuiID id;
-        while (m_imguiFunctionsSelection.GetNextSelectedItem(&it, &id))
-        {
-            selectedAllNamedFunctionIndices.push_back(IndexT(id));
-        }
-    }
-    else
-    {
-        // Slow route. The filter does not contain all elements.
-        // Uses lookup set. Is much faster than linear search over elements.
-        const std::unordered_set<IndexT> filteredSet(
-            m_functionIndicesFilter.filtered.begin(),
-            m_functionIndicesFilter.filtered.end());
-
-        void *it = nullptr;
-        ImGuiID id;
-        while (m_imguiFunctionsSelection.GetNextSelectedItem(&it, &id))
-        {
-            if (filteredSet.count(IndexT(id)) == 0)
-                continue;
-
-            selectedAllNamedFunctionIndices.push_back(IndexT(id));
-        }
-    }
-
-    m_selectedNamedFunctionIndices = std::move(selectedAllNamedFunctionIndices);
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::prepare_rebuild()
-{
-    m_matchedFunctionsBuilt = false;
-    util::free_container(m_matchedFunctions);
-
-    for (File &file : m_files)
-    {
-        file.prepare_rebuild();
-    }
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::init()
-{
-    for (File &file : m_files)
-    {
-        file.init();
-    }
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::has_active_command() const
-{
-    for (const File &file : m_files)
-    {
-        if (file.has_active_command())
-            return true;
-    }
-    return false;
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::executables_loaded() const
-{
-    int count = 0;
-
-    for (const File &file : m_files)
-    {
-        if (file.exe_loaded())
-            ++count;
-    }
-    return count == m_files.size();
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::named_functions_built() const
-{
-    int count = 0;
-
-    for (const File &file : m_files)
-    {
-        if (file.named_functions_built())
-            ++count;
-    }
-    return count == m_files.size();
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::matched_functions_built() const
-{
-    return m_matchedFunctionsBuilt;
-}
-
-bool ImGuiApp::ProgramComparisonDescriptor::bundles_ready() const
-{
-    int count = 0;
-
-    for (const File &file : m_files)
-    {
-        if (file.bundles_ready())
-            ++count;
-    }
-    return count == m_files.size();
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::update_selected_matched_functions()
-{
-    assert(named_functions_built());
-
-    std::vector<IndexT> selectedMatchedFunctionIndices;
-
-    const std::vector<IndexT> &selected0 = m_files[0].m_selectedNamedFunctionIndices;
-    const std::vector<IndexT> &selected1 = m_files[1].m_selectedNamedFunctionIndices;
-
-    {
-        const size_t maxSize0 = m_files[0].m_namedFunctionMatchInfos.size();
-        const size_t maxSize1 = m_files[1].m_namedFunctionMatchInfos.size();
-        const size_t maxSize = std::min(maxSize0, maxSize1);
-        size_t size = selected0.size() + selected1.size();
-        // There can be no more matched functions than the smallest max function count.
-        if (size > maxSize)
-            size = maxSize;
-        selectedMatchedFunctionIndices.reserve(size);
-    }
-
-    const IndexT lessIdx = selected0.size() < selected1.size() ? 0 : 1;
-    const IndexT moreIdx = (lessIdx + 1) % 2;
-
-    for (IndexT functionIndex : m_files[moreIdx].m_selectedNamedFunctionIndices)
-    {
-        const NamedFunctionMatchInfo &matchInfo = m_files[moreIdx].m_namedFunctionMatchInfos[functionIndex];
-        if (matchInfo.is_matched())
-        {
-            selectedMatchedFunctionIndices.push_back(matchInfo.matched_index);
-        }
-    }
-
-    // Uses lookup set. Is much faster than linear search over elements.
-    const std::unordered_set<IndexT> priorSelectedMatchedFunctionIndicesSet(
-        selectedMatchedFunctionIndices.begin(),
-        selectedMatchedFunctionIndices.end());
-
-    for (IndexT functionIndex : m_files[lessIdx].m_selectedNamedFunctionIndices)
-    {
-        const NamedFunctionMatchInfo &matchInfo = m_files[lessIdx].m_namedFunctionMatchInfos[functionIndex];
-        if (matchInfo.is_matched())
-        {
-            if (priorSelectedMatchedFunctionIndicesSet.count(matchInfo.matched_index) != 0)
-                continue;
-
-            selectedMatchedFunctionIndices.push_back(matchInfo.matched_index);
-        }
-    }
-
-    m_selectedMatchedFunctionIndices = std::move(selectedMatchedFunctionIndices);
-    m_selectedMatchedFunctionIndices.shrink_to_fit();
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::update_all_bundle_ui_infos()
-{
-    // Updates ui infos for all bundles to avoid missing any.
-    // Potentially is more expensive than we would like it to be.
-    // We try to keep calls to a minimum.
-
-    for (IndexT fileIdx = 0; fileIdx < 2; ++fileIdx)
-    {
-        File &file = m_files[fileIdx];
-
-        for (IndexT bundleType = 0; bundleType < IndexT(MatchBundleType::Count); ++bundleType)
-        {
-            const span<const NamedFunctionBundle> bundles = file.get_bundles(MatchBundleType(bundleType));
-            const span<File::NamedFunctionBundleUiInfo> bundleUiInfos =
-                file.get_bundle_ui_infos(MatchBundleType(bundleType));
-            const IndexT bundleCount = bundles.size();
-            assert(bundleUiInfos.size() == bundleCount);
-
-            for (IndexT bundleIdx = 0; bundleIdx < bundleCount; ++bundleIdx)
-            {
-                const NamedFunctionBundle &bundle = bundles[bundleIdx];
-                if (bundle.matchedFunctionIndices.empty())
-                    continue;
-
-                File::NamedFunctionBundleUiInfo &uiInfo = bundleUiInfos[bundleIdx];
-                if (uiInfo.m_similarity.has_value())
-                    continue;
-
-                const FunctionsSimilarityReport report = build_function_similarity_report({bundle.matchedFunctionIndices});
-
-                if (!report.has_result())
-                    continue;
-
-                const uint32_t avgSimilarity = report.totalSimilarity.value() / bundle.allNamedFunctionIndices.size();
-                uiInfo.update_info(bundle.name, bundle.id, true, avgSimilarity);
-            }
-        }
-    }
-}
-
-ImGuiApp::ProgramComparisonDescriptor::FunctionsSimilarityReport ImGuiApp::ProgramComparisonDescriptor::
-    build_function_similarity_report(span<const IndexT> matchedFunctionIndices)
-{
-    assert(!matchedFunctionIndices.empty());
-    FunctionsSimilarityReport report;
-    report.totalSimilarity.emplace(0);
-
-    for (IndexT matchedFunctionIndex : matchedFunctionIndices)
-    {
-        const MatchedFunction &matchedFunction = m_matchedFunctions[matchedFunctionIndex];
-
-        if (!matchedFunction.is_compared())
-        {
-            // Is missing comparison. Report is incomplete.
-            report.totalSimilarity = std::nullopt;
-            break;
-        }
-        // #TODO: Make strictness configurable.
-        report.totalSimilarity.value() += matchedFunction.comparison.get_similarity_as_int(AsmMatchStrictness::Lenient);
-    }
-    return report;
-}
-
-void ImGuiApp::ProgramComparisonDescriptor::update_matched_named_function_ui_infos(span<const IndexT> matchedFunctionIndices)
-{
-    for (IndexT matchedFunctionIndex : matchedFunctionIndices)
-    {
-        const MatchedFunction &matchedFunction = m_matchedFunctions[matchedFunctionIndex];
-        assert(matchedFunction.is_compared());
-
-        for (IndexT i = 0; i < 2; ++i)
-        {
-            const IndexT namedFunctionIndex = matchedFunction.named_idx_pair[i];
-            File &file = m_files[i];
-            File::NamedFunctionUiInfo &uiInfo = file.m_namedFunctionUiInfos[namedFunctionIndex];
-            const NamedFunction &namedFunction = file.m_revisionDescriptor->m_namedFunctions[namedFunctionIndex];
-            // #TODO: Make strictness configurable.
-            const int8_t similarity = matchedFunction.comparison.get_similarity_as_int(AsmMatchStrictness::Lenient);
-            uiInfo.update_info(namedFunction.name, namedFunction.id, true, similarity);
-        }
-    }
-}
-
-span<const IndexT> ImGuiApp::ProgramComparisonDescriptor::get_matched_named_function_indices_for_processing(IndexT side)
-{
-    const std::vector<IndexT> matchedNamedFunctionIndices =
-        build_named_function_indices(m_matchedFunctions, m_selectedMatchedFunctionIndices, side);
-
-    return m_files[side].m_revisionDescriptor->m_processedNamedFunctions.get_items_for_processing(
-        span<const IndexT>{matchedNamedFunctionIndices});
-}
-
-std::vector<IndexT> ImGuiApp::ProgramComparisonDescriptor::build_named_function_indices(
-    const MatchedFunctions &matchedFunctions,
-    span<const IndexT> matchedFunctionIndices,
-    IndexT side)
-{
-    const size_t count = matchedFunctionIndices.size();
-    std::vector<IndexT> namedFunctionIndices(count);
-    for (size_t i = 0; i < count; ++i)
-    {
-        namedFunctionIndices[i] = matchedFunctions[matchedFunctionIndices[i]].named_idx_pair[side];
-    }
-    return namedFunctionIndices;
-}
-
 ImGuiApp::ImGuiApp()
 {
 }
@@ -1224,15 +224,14 @@ WorkQueueCommandPtr ImGuiApp::create_load_exe_command(ProgramFileRevisionDescrip
         auto res = static_cast<AsyncLoadExeResult *>(result.get());
         revisionDescriptor->m_executable = std::move(res->executable);
         revisionDescriptor->m_exeLoadTimepoint = std::chrono::system_clock::now();
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_executable.reset();
     revisionDescriptor->m_exeLoadTimepoint = InvalidTimePoint;
     revisionDescriptor->m_exeSaveConfigFilename.clear();
     revisionDescriptor->m_exeSaveConfigTimepoint = InvalidTimePoint;
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::Load;
+    revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::Load);
 
     return command;
 }
@@ -1247,7 +246,7 @@ WorkQueueCommandPtr ImGuiApp::create_load_pdb_command(ProgramFileRevisionDescrip
         auto res = static_cast<AsyncLoadPdbResult *>(result.get());
         revisionDescriptor->m_pdbReader = std::move(res->pdbReader);
         revisionDescriptor->m_pdbLoadTimepoint = std::chrono::system_clock::now();
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_pdbReader.reset();
@@ -1255,8 +254,7 @@ WorkQueueCommandPtr ImGuiApp::create_load_pdb_command(ProgramFileRevisionDescrip
     revisionDescriptor->m_pdbSaveConfigFilename.clear();
     revisionDescriptor->m_pdbSaveConfigTimepoint = InvalidTimePoint;
     revisionDescriptor->m_exeFilenameFromPdb.clear();
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::Load;
+    revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::Load);
 
     return command;
 }
@@ -1297,13 +295,12 @@ WorkQueueCommandPtr ImGuiApp::create_save_exe_config_command(ProgramFileRevision
             revisionDescriptor->m_exeSaveConfigFilename = util::abs_path(com->options.config_file);
             revisionDescriptor->m_exeSaveConfigTimepoint = std::chrono::system_clock::now();
         }
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_exeSaveConfigFilename.clear();
     revisionDescriptor->m_exeSaveConfigTimepoint = InvalidTimePoint;
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::SaveConfig;
+    revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::SaveConfig);
 
     return command;
 }
@@ -1324,13 +321,12 @@ WorkQueueCommandPtr ImGuiApp::create_save_pdb_config_command(ProgramFileRevision
             revisionDescriptor->m_pdbSaveConfigFilename = util::abs_path(com->options.config_file);
             revisionDescriptor->m_pdbSaveConfigTimepoint = std::chrono::system_clock::now();
         }
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_pdbSaveConfigFilename.clear();
     revisionDescriptor->m_pdbSaveConfigTimepoint = InvalidTimePoint;
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::SaveConfig;
+    revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::SaveConfig);
 
     return command;
 }
@@ -1348,13 +344,14 @@ WorkQueueCommandPtr ImGuiApp::create_build_named_functions_command(ProgramFileRe
         revisionDescriptor->m_namedFunctions = std::move(res->named_functions);
         revisionDescriptor->m_processedNamedFunctions.init(revisionDescriptor->m_namedFunctions.size());
         revisionDescriptor->m_namedFunctionsBuilt = true;
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_namedFunctions.clear();
     revisionDescriptor->m_namedFunctionsBuilt = false;
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::BuildNamedFunctions;
+    revisionDescriptor->add_async_work_hint(
+        command->command_id,
+        ProgramFileRevisionDescriptor::WorkReason::BuildNamedFunctions);
 
     return command;
 }
@@ -1385,14 +382,13 @@ WorkQueueCommandPtr ImGuiApp::create_build_matched_functions_command(ProgramComp
             ProgramComparisonDescriptor::File &file = comparisonDescriptor->m_files[i];
 
             file.m_namedFunctionMatchInfos = std::move(res->matchedFunctionsData.namedFunctionMatchInfosArray[i]);
-            file.invalidate_command_id();
+            file.remove_async_work_hint(result->command->command_id);
         }
     };
 
     for (ProgramComparisonDescriptor::File &file : comparisonDescriptor->m_files)
     {
-        file.m_activeCommandId = command->command_id;
-        file.m_workReason = ProgramComparisonDescriptor::File::WorkReason::BuildMatchedFunctions;
+        file.add_async_work_hint(command->command_id, ProgramComparisonDescriptor::File::WorkReason::BuildMatchedFunctions);
     }
 
     return command;
@@ -1416,11 +412,10 @@ WorkQueueCommandPtr ImGuiApp::create_build_bundles_from_compilands_command(Progr
         auto res = static_cast<AsyncBuildBundlesFromCompilandsResult *>(result.get());
         file->m_compilandBundles = std::move(res->bundles);
         file->m_compilandBundlesBuilt = TriState::True;
-        file->invalidate_command_id();
+        file->remove_async_work_hint(result->command->command_id);
     };
 
-    file->m_activeCommandId = command->command_id;
-    file->m_workReason = ProgramComparisonDescriptor::File::WorkReason::BuildCompilandBundles;
+    file->add_async_work_hint(command->command_id, ProgramComparisonDescriptor::File::WorkReason::BuildCompilandBundles);
 
     return command;
 }
@@ -1443,11 +438,10 @@ WorkQueueCommandPtr ImGuiApp::create_build_bundles_from_source_files_command(Pro
         auto res = static_cast<AsyncBuildBundlesFromSourceFilesResult *>(result.get());
         file->m_sourceFileBundles = std::move(res->bundles);
         file->m_sourceFileBundlesBuilt = TriState::True;
-        file->invalidate_command_id();
+        file->remove_async_work_hint(result->command->command_id);
     };
 
-    file->m_activeCommandId = command->command_id;
-    file->m_workReason = ProgramComparisonDescriptor::File::WorkReason::BuildSourceFileBundles;
+    file->add_async_work_hint(command->command_id, ProgramComparisonDescriptor::File::WorkReason::BuildSourceFileBundles);
 
     return command;
 }
@@ -1474,11 +468,10 @@ WorkQueueCommandPtr ImGuiApp::create_build_single_bundle_command(
         auto res = static_cast<AsyncBuildSingleBundleResult *>(result.get());
         file->m_singleBundle = std::move(res->bundle);
         file->m_singleBundleBuilt = true;
-        file->invalidate_command_id();
+        file->remove_async_work_hint(result->command->command_id);
     };
 
-    file->m_activeCommandId = command->command_id;
-    file->m_workReason = ProgramComparisonDescriptor::File::WorkReason::BuildSingleBundle;
+    file->add_async_work_hint(command->command_id, ProgramComparisonDescriptor::File::WorkReason::BuildSingleBundle);
 
     return command;
 }
@@ -1495,10 +488,13 @@ WorkQueueCommandPtr ImGuiApp::create_disassemble_selected_functions_command(
         namedFunctionIndices,
         *revisionDescriptor->m_executable));
 
-    command->callback = [revisionDescriptor](WorkQueueResultPtr &result) { revisionDescriptor->invalidate_command_id(); };
+    command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
+    };
 
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::DisassembleSelectedFunctions;
+    revisionDescriptor->add_async_work_hint(
+        command->command_id,
+        ProgramFileRevisionDescriptor::WorkReason::DisassembleSelectedFunctions);
 
     return command;
 }
@@ -1516,10 +512,13 @@ WorkQueueCommandPtr ImGuiApp::create_build_source_lines_for_selected_functions_c
             namedFunctionIndices,
             *revisionDescriptor->m_pdbReader));
 
-    command->callback = [revisionDescriptor](WorkQueueResultPtr &result) { revisionDescriptor->invalidate_command_id(); };
+    command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
+    };
 
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::BuildSourceLinesForSelectedFunctions;
+    revisionDescriptor->add_async_work_hint(
+        command->command_id,
+        ProgramFileRevisionDescriptor::WorkReason::BuildSourceLinesForSelectedFunctions);
 
     return command;
 }
@@ -1542,11 +541,12 @@ WorkQueueCommandPtr ImGuiApp::create_load_source_files_for_selected_functions_co
         {
             // Show error?
         }
-        revisionDescriptor->invalidate_command_id();
+        revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
-    revisionDescriptor->m_activeCommandId = command->command_id;
-    revisionDescriptor->m_workReason = ProgramFileRevisionDescriptor::WorkReason::LoadSourceFilesForSelectedFunctions;
+    revisionDescriptor->add_async_work_hint(
+        command->command_id,
+        ProgramFileRevisionDescriptor::WorkReason::LoadSourceFilesForSelectedFunctions);
 
     return command;
 }
@@ -1588,8 +588,6 @@ WorkQueueCommandPtr ImGuiApp::create_build_comparison_records_for_selected_funct
             namedFunctionsPair,
             matchedFunctionIndices));
 
-    ++comparisonDescriptor->m_pendingBuildComparisonRecordsCommands;
-
     command->callback = [comparisonDescriptor, matchedFunctionIndices](WorkQueueResultPtr &result) {
         comparisonDescriptor->update_matched_named_function_ui_infos(matchedFunctionIndices);
         if (--comparisonDescriptor->m_pendingBuildComparisonRecordsCommands == 0)
@@ -1598,20 +596,23 @@ WorkQueueCommandPtr ImGuiApp::create_build_comparison_records_for_selected_funct
         }
         for (ProgramComparisonDescriptor::File &file : comparisonDescriptor->m_files)
         {
-            file.invalidate_command_id();
+            file.remove_async_work_hint(result->command->command_id);
         }
     };
 
+    ++comparisonDescriptor->m_pendingBuildComparisonRecordsCommands;
+
     for (ProgramComparisonDescriptor::File &file : comparisonDescriptor->m_files)
     {
-        file.m_activeCommandId = command->command_id;
-        file.m_workReason = ProgramComparisonDescriptor::File::WorkReason::BuildComparisonRecordsForSelectedFunctions;
+        file.add_async_work_hint(
+            command->command_id,
+            ProgramComparisonDescriptor::File::WorkReason::BuildComparisonRecordsForSelectedFunctions);
     }
 
     return command;
 }
 
-ImGuiApp::ProgramFileDescriptor *ImGuiApp::get_program_file_descriptor(size_t program_file_idx)
+ProgramFileDescriptor *ImGuiApp::get_program_file_descriptor(size_t program_file_idx)
 {
     if (program_file_idx < m_programFiles.size())
     {
@@ -1623,7 +624,7 @@ ImGuiApp::ProgramFileDescriptor *ImGuiApp::get_program_file_descriptor(size_t pr
 void ImGuiApp::load_async(ProgramFileDescriptor *descriptor)
 {
     assert(descriptor != nullptr);
-    assert(!descriptor->has_active_command());
+    assert(!descriptor->has_async_work());
 
     descriptor->create_new_revision_descriptor();
 
@@ -1635,7 +636,7 @@ void ImGuiApp::load_async(ProgramFileDescriptor *descriptor)
 void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
 {
     assert(descriptor != nullptr);
-    assert(!descriptor->has_active_command());
+    assert(!descriptor->has_async_work());
     assert(descriptor->m_revisionDescriptor != nullptr);
 
     WorkQueueDelayedCommand head_command;
@@ -1668,7 +669,7 @@ void ImGuiApp::load_and_init_comparison_async(
 {
     assert(fileDescriptorPair[0]->can_load() || fileDescriptorPair[0]->exe_loaded());
     assert(fileDescriptorPair[1]->can_load() || fileDescriptorPair[1]->exe_loaded());
-    assert(!comparisonDescriptor->has_active_command());
+    assert(!comparisonDescriptor->has_async_work());
 
     for (int i = 0; i < 2; ++i)
     {
@@ -1744,7 +745,7 @@ void ImGuiApp::load_and_init_comparison_async(
 void ImGuiApp::init_comparison_async(ProgramComparisonDescriptor *comparisonDescriptor)
 {
     assert(comparisonDescriptor != nullptr);
-    assert(!comparisonDescriptor->has_active_command());
+    assert(!comparisonDescriptor->has_async_work());
 
     if (!comparisonDescriptor->named_functions_built())
     {
@@ -1882,6 +883,18 @@ void ImGuiApp::process_named_functions_async(
     m_workQueue.enqueue(std::move(command));
 }
 
+void ImGuiApp::process_matched_functions_async(
+    ProgramComparisonDescriptor *comparisonDescriptor,
+    span<const IndexT> matchedFunctionIndices)
+{
+    assert(comparisonDescriptor != nullptr);
+    assert(!matchedFunctionIndices.empty());
+
+    auto command =
+        create_build_comparison_records_for_selected_functions_command(comparisonDescriptor, matchedFunctionIndices);
+    m_workQueue.enqueue(std::move(command));
+}
+
 void ImGuiApp::process_named_and_matched_functions_async(
     ProgramComparisonDescriptor *comparisonDescriptor,
     span<const IndexT> matchedFunctionIndices)
@@ -1922,6 +935,7 @@ void ImGuiApp::process_named_and_matched_functions_async(
                         if (--(*sharedWorkCount) == 0)
                         {
                             --comparisonDescriptor->m_pendingBuildComparisonRecordsCommands;
+                            assert(comparisonDescriptor->matched_functions_disassembled(matchedFunctionIndices));
                             process_matched_functions_async(comparisonDescriptor, matchedFunctionIndices);
                         }
                         return nullptr;
@@ -1931,25 +945,17 @@ void ImGuiApp::process_named_and_matched_functions_async(
             }
         }
     }
-    else
+    else if (comparisonDescriptor->matched_functions_disassembled(matchedFunctionIndices))
     {
         // Named functions are already processed. Proceed with the matched functions.
 
         process_matched_functions_async(comparisonDescriptor, matchedFunctionIndices);
     }
-}
-
-void ImGuiApp::process_matched_functions_async(
-    ProgramComparisonDescriptor *comparisonDescriptor,
-    span<const IndexT> matchedFunctionIndices)
-{
-    assert(comparisonDescriptor != nullptr);
-    assert(!matchedFunctionIndices.empty());
-
-    auto command =
-        create_build_comparison_records_for_selected_functions_command(comparisonDescriptor, matchedFunctionIndices);
-
-    m_workQueue.enqueue(std::move(command));
+    else
+    {
+        // Something else has started the processing of named function but they are not yet finished.
+        // #TODO: Add a scheduler or message or something.
+    }
 }
 
 void ImGuiApp::add_file()
@@ -1982,7 +988,7 @@ void ImGuiApp::update_closed_program_comparisons()
         std::remove_if(
             m_programComparisons.begin(),
             m_programComparisons.end(),
-            [](const ProgramComparisonDescriptorPtr &p) { return !p->m_has_open_window && !p->has_active_command(); }),
+            [](const ProgramComparisonDescriptorPtr &p) { return !p->m_imguiHasOpenWindow && !p->has_async_work(); }),
         m_programComparisons.end());
 }
 
@@ -2153,9 +1159,9 @@ void ImGuiApp::ComparisonManagerWindows()
 
         const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
 
-        ImScoped::Window window(title.c_str(), &descriptor.m_has_open_window);
+        ImScoped::Window window(title.c_str(), &descriptor.m_imguiHasOpenWindow);
         ImScoped::ID id(i);
-        if (window.IsContentVisible && descriptor.m_has_open_window)
+        if (window.IsContentVisible && descriptor.m_imguiHasOpenWindow)
         {
             ComparisonManagerBody(descriptor);
         }
@@ -2244,7 +1250,7 @@ void ImGuiApp::FileManagerDescriptor(ProgramFileDescriptor &descriptor, bool &er
 {
     {
         ImScoped::Group group;
-        ImScoped::Disabled disabled(descriptor.has_active_command());
+        ImScoped::Disabled disabled(descriptor.has_async_work());
         ImScoped::ItemWidth item_width(ImGui::GetFontSize() * -12);
 
         FileManagerDescriptorExeFile(descriptor);
@@ -2258,34 +1264,15 @@ void ImGuiApp::FileManagerDescriptor(ProgramFileDescriptor &descriptor, bool &er
         FileManagerDescriptorActions(descriptor, erased);
     }
 
-    // Draw command overlay
-    if (descriptor.has_active_command())
-    {
-        ImRect group_rect;
-        group_rect.Min = ImGui::GetItemRectMin();
-        group_rect.Max = ImGui::GetItemRectMax();
-
-        const std::string overlay = fmt::format("Processing command {:d} ..", descriptor.get_active_command_id());
-
-        OverlayProgressBar(group_rect, -1.0f * (float)ImGui::GetTime(), overlay.c_str());
-    }
+    const ImRect groupRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    FileManagerDescriptorProgressOverlay(descriptor, groupRect);
 
     ProgramFileRevisionDescriptor *revisionDescriptor = descriptor.m_revisionDescriptor.get();
 
     if (revisionDescriptor != nullptr)
     {
         FileManagerDescriptorSaveLoadStatus(*revisionDescriptor);
-
-        // Draw some details
-
-        if (revisionDescriptor->m_executable != nullptr || revisionDescriptor->m_pdbReader != nullptr)
-        {
-            ImScoped::TreeNode tree("Info");
-            if (tree.IsOpen)
-            {
-                FileManagerInfo(descriptor, *revisionDescriptor);
-            }
-        }
+        FileManagerInfoNode(descriptor, *revisionDescriptor);
     }
 
     ImGui::Spacing();
@@ -2305,7 +1292,7 @@ void ImGuiApp::FileManagerDescriptorExeFile(ProgramFileDescriptor &descriptor)
     ImGui::InputTextWithHint("Program File", auto_str, &descriptor.m_exeFilename);
 
     // Tooltip on hover 'auto'
-    if (is_auto_str(descriptor.m_exeFilename) && !descriptor.has_active_command())
+    if (is_auto_str(descriptor.m_exeFilename) && !descriptor.has_async_work())
     {
         const std::string exe_filename = descriptor.evaluate_exe_filename();
         if (exe_filename.empty())
@@ -2332,7 +1319,7 @@ void ImGuiApp::FileManagerDescriptorExeConfig(ProgramFileDescriptor &descriptor)
     ImGui::InputTextWithHint("Program Config File", auto_str, &descriptor.m_exeConfigFilename);
 
     // Tooltip on hover 'auto'
-    if (is_auto_str(descriptor.m_exeConfigFilename) && !descriptor.m_exeFilename.empty() && !descriptor.has_active_command())
+    if (is_auto_str(descriptor.m_exeConfigFilename) && !descriptor.m_exeFilename.empty() && !descriptor.has_async_work())
     {
         const std::string exe_filename = descriptor.evaluate_exe_filename();
         if (exe_filename.empty())
@@ -2462,6 +1449,16 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
     }
 }
 
+void ImGuiApp::FileManagerDescriptorProgressOverlay(const ProgramFileDescriptor &descriptor, const ImRect &rect)
+{
+    if (descriptor.has_async_work())
+    {
+        const std::string overlay = fmt::format("Processing command {:d} ..", descriptor.get_first_active_command_id());
+
+        OverlayProgressBar(rect, -1.0f * (float)ImGui::GetTime(), overlay.c_str());
+    }
+}
+
 void ImGuiApp::FileManagerDescriptorSaveLoadStatus(const ProgramFileRevisionDescriptor &descriptor)
 {
     FileManagerDescriptorLoadStatus(descriptor);
@@ -2543,6 +1540,20 @@ void ImGuiApp::FileManagerGlobalButtons()
             {
                 load_async(descriptor.get());
             }
+        }
+    }
+}
+
+void ImGuiApp::FileManagerInfoNode(
+    ProgramFileDescriptor &fileDescriptor,
+    const ProgramFileRevisionDescriptor &revisionDescriptor)
+{
+    if (revisionDescriptor.m_executable != nullptr || revisionDescriptor.m_pdbReader != nullptr)
+    {
+        ImScoped::TreeNode tree("Info");
+        if (tree.IsOpen)
+        {
+            FileManagerInfo(fileDescriptor, revisionDescriptor);
         }
     }
 }
@@ -2957,81 +1968,248 @@ void ImGuiApp::OutputManagerBody()
 
 void ImGuiApp::ComparisonManagerBody(ProgramComparisonDescriptor &descriptor)
 {
-    // TODO: Add clippers to lists and tables.
-    // TODO: Split into smaller functions.
-
-    constexpr ImGuiTableFlags tableFlags =
-        ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_NoPadOuterX;
+    // #TODO: Add clippers to lists and tables.
 
     {
+        ComparisonManagerFilesHeaders();
+
         ImScoped::Group group;
-        ImScoped::Disabled disabled(descriptor.has_active_command());
+        ImScoped::Disabled disabled(descriptor.has_async_work());
 
-        // TODO: Make box resizable.
+        ComparisonManagerFilesLists(descriptor);
+        ComparisonManagerFilesActions(descriptor);
+    }
 
-        // Draw comparison selection
+    const ImRect groupRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    ComparisonManagerFilesProgressOverlay(descriptor, groupRect);
+    ComparisonManagerFilesStatus(descriptor);
+
+    if (descriptor.bundles_ready())
+    {
+        ComparisonManagerBundlesSettings(descriptor);
+        ComparisonManagerBundlesLists(descriptor);
+        ComparisonManagerFunctionsSettings(descriptor);
+        ComparisonManagerFunctionsLists(descriptor);
+    }
+}
+
+void ImGuiApp::ComparisonManagerFilesHeaders()
+{
+    ImScoped::Table table("##files_header_table", 2, ComparisonSplitTableFlags);
+    if (table.IsContentVisible)
+    {
+        ImGui::TableNextRow();
+
+        for (int i = 0; i < 2; ++i)
         {
-            ImScoped::Table table("##file_list_table", 2, tableFlags);
-            if (table.IsContentVisible)
-            {
-                ImGui::TableNextRow();
-
-                for (int i = 0; i < 2; ++i)
-                {
-                    ImGui::TableSetColumnIndex(i);
-                    ImScoped::ID id(i);
-
-                    ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
-
-                    ComparisonManagerProgramFileSelection(file);
-                }
-            }
+            ImGui::TableSetColumnIndex(i);
+            ImGui::TextUnformatted("Select File");
         }
+    }
+}
 
-        // Draw compare button
+void ImGuiApp::ComparisonManagerFilesLists(ProgramComparisonDescriptor &descriptor)
+{
+    const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos(ImVec2(cursorPos.x, cursorPos.y - 5.0f)); // Hack, removes gap.
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 3), ImVec2(FLT_MAX, FLT_MAX));
+    const ImVec2 outer_size(0, ImGui::GetTextLineHeightWithSpacing() * 9);
+    ImScoped::Child resizeChild("##files_list_resize", outer_size, ImGuiChildFlags_ResizeY);
+    if (resizeChild.IsContentVisible)
+    {
+        ImScoped::Table table("##files_list_table", 2, ComparisonSplitTableFlags);
+        if (table.IsContentVisible)
         {
-            const IndexT selectedFileIdx0 = descriptor.m_files[0].m_imguiSelectedFileIdx;
-            const IndexT selectedFileIdx1 = descriptor.m_files[1].m_imguiSelectedFileIdx;
-            ProgramFileDescriptor *fileDescriptor0 = get_program_file_descriptor(selectedFileIdx0);
-            ProgramFileDescriptor *fileDescriptor1 = get_program_file_descriptor(selectedFileIdx1);
+            ImGui::TableNextRow();
 
-            if (fileDescriptor0 != nullptr && fileDescriptor1 != nullptr)
+            for (int i = 0; i < 2; ++i)
             {
-                const bool canCompare0 = fileDescriptor0->can_load() || fileDescriptor0->exe_loaded();
-                const bool canCompare1 = fileDescriptor1->can_load() || fileDescriptor1->exe_loaded();
-                ImScoped::Disabled disabled(!(canCompare0 && canCompare1));
-                // Change button color.
-                ImScoped::StyleColor color1(ImGuiCol_Button, (ImVec4)ImColor::HSV(0.8f, 0.6f, 0.6f));
-                ImScoped::StyleColor color2(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(0.8f, 0.8f, 0.8f));
-                ImScoped::StyleColor color3(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(0.8f, 1.0f, 1.0f));
-                // Change text color too to make it readable with the light ImGui color theme.
-                ImScoped::StyleColor text_color1(ImGuiCol_Text, ImVec4(1.00f, 1.00f, 1.00f, 1.00f));
-                ImScoped::StyleColor text_color2(ImGuiCol_TextDisabled, ImVec4(0.50f, 0.50f, 0.50f, 1.00f));
-                if (ImGui::Button("Compare"))
-                {
-                    load_and_init_comparison_async({fileDescriptor0, fileDescriptor1}, &descriptor);
-                }
+                ImGui::TableSetColumnIndex(i);
+                ImScoped::ID id(i);
+
+                ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
+
+                ComparisonManagerFilesList(file);
             }
         }
     }
+}
 
-    // Draw command overlay
-    if (descriptor.has_active_command())
+void ImGuiApp::ComparisonManagerFilesList(ProgramComparisonDescriptor::File &file)
+{
+    ImScoped::Child styleChild(
+        "##files_list_style",
+        ImVec2(0, 0),
+        ImGuiChildFlags_FrameStyle,
+        ImGuiWindowFlags_HorizontalScrollbar);
+
+    if (styleChild.IsContentVisible)
     {
-        ImRect group_rect;
-        group_rect.Min = ImGui::GetItemRectMin();
-        group_rect.Max = ImGui::GetItemRectMax();
+        const IndexT count = IndexT(m_programFiles.size());
+        for (IndexT n = 0; n < count; ++n)
+        {
+            ProgramFileDescriptor *program_file = m_programFiles[n].get();
+            const std::string name = program_file->create_descriptor_name_with_file_info();
+            const bool selected = (file.m_imguiSelectedFileIdx == n);
 
+            if (ImGui::Selectable(name.c_str(), selected))
+                file.m_imguiSelectedFileIdx = n;
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerFilesActions(ProgramComparisonDescriptor &descriptor)
+{
+    const IndexT selectedFileIdx0 = descriptor.m_files[0].m_imguiSelectedFileIdx;
+    const IndexT selectedFileIdx1 = descriptor.m_files[1].m_imguiSelectedFileIdx;
+    ProgramFileDescriptor *fileDescriptor0 = get_program_file_descriptor(selectedFileIdx0);
+    ProgramFileDescriptor *fileDescriptor1 = get_program_file_descriptor(selectedFileIdx1);
+
+    if (fileDescriptor0 != nullptr && fileDescriptor1 != nullptr)
+    {
+        const bool canCompare0 = fileDescriptor0->can_load() || fileDescriptor0->exe_loaded();
+        const bool canCompare1 = fileDescriptor1->can_load() || fileDescriptor1->exe_loaded();
+        ImScoped::Disabled disabled(!(canCompare0 && canCompare1));
+        // Change button color.
+        ImScoped::StyleColor color1(ImGuiCol_Button, (ImVec4)ImColor::HSV(0.8f, 0.6f, 0.6f));
+        ImScoped::StyleColor color2(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(0.8f, 0.8f, 0.8f));
+        ImScoped::StyleColor color3(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(0.8f, 1.0f, 1.0f));
+        // Change text color too to make it readable with the light ImGui color theme.
+        ImScoped::StyleColor text_color1(ImGuiCol_Text, ImVec4(1.00f, 1.00f, 1.00f, 1.00f));
+        ImScoped::StyleColor text_color2(ImGuiCol_TextDisabled, ImVec4(0.50f, 0.50f, 0.50f, 1.00f));
+        if (ImGui::Button("Compare"))
+        {
+            load_and_init_comparison_async({fileDescriptor0, fileDescriptor1}, &descriptor);
+        }
+
+        // #TODO: Add button to disassemble and compare all matched functions.
+        // #TODO: Add button to disassemble all unmatched functions.
+    }
+}
+
+void ImGuiApp::ComparisonManagerFilesProgressOverlay(const ProgramComparisonDescriptor &descriptor, const ImRect &rect)
+{
+    if (descriptor.has_async_work())
+    {
         const std::string overlay = fmt::format(
             "Processing commands {:d}:{:d} ..",
-            descriptor.m_files[0].get_active_command_id(),
-            descriptor.m_files[1].get_active_command_id());
+            descriptor.m_files[0].get_first_active_command_id(),
+            descriptor.m_files[1].get_first_active_command_id());
 
-        OverlayProgressBar(group_rect, -1.0f * (float)ImGui::GetTime(), overlay.c_str());
+        OverlayProgressBar(rect, -1.0f * (float)ImGui::GetTime(), overlay.c_str());
+    }
+}
+
+void ImGuiApp::ComparisonManagerFilesStatus(const ProgramComparisonDescriptor &descriptor)
+{
+    ImScoped::Table table("##status_table", 2, ComparisonSplitTableFlags);
+    if (table.IsContentVisible)
+    {
+        ImGui::TableNextRow();
+
+        for (size_t i = 0; i < 2; ++i)
+        {
+            ImGui::TableSetColumnIndex(i);
+
+            const ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
+            const ProgramFileRevisionDescriptorPtr &revisionDescriptor = file.m_revisionDescriptor;
+
+            if (revisionDescriptor != nullptr)
+            {
+                FileManagerDescriptorLoadStatus(*revisionDescriptor);
+            }
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerBundlesSettings(ProgramComparisonDescriptor &descriptor)
+{
+    ImScoped::Table table("##bundles_filter_table", 2, ComparisonSplitTableFlags);
+    if (table.IsContentVisible)
+    {
+        ImGui::TableNextRow();
+
+        for (size_t i = 0; i < 2; ++i)
+        {
+            ImGui::TableSetColumnIndex(i);
+            ImScoped::ItemWidth item_width(ImGui::GetFontSize() * -12);
+            ImScoped::ID id(i);
+
+            ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
+
+            ComparisonManagerBundlesTypeSelection(file);
+            ComparisonManagerBundlesFilter(file);
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerBundlesTypeSelection(ProgramComparisonDescriptor::File &file)
+{
+    std::array<const char *, size_t(MatchBundleType::Count)> options;
+    IndexT count = 0;
+    if (file.m_compilandBundlesBuilt == TriState::True)
+        options[count++] = "Compiland Bundles";
+    if (file.m_sourceFileBundlesBuilt == TriState::True)
+        options[count++] = "Source File Bundles";
+    if (file.m_singleBundleBuilt)
+        options[count++] = "Single Bundle";
+
+    assert(count > 0);
+    IndexT &index = file.m_imguiSelectedBundleTypeIdx;
+    index = std::clamp(index, IndexT(0), count - 1);
+    const char *preview = options[index];
+
+    ImScoped::Combo combo("Select Bundle Type", preview);
+    if (combo.IsOpen)
+    {
+        for (IndexT n = 0; n < count; n++)
+        {
+            const bool selected = (index == n);
+            if (ImGui::Selectable(options[n], selected))
+            {
+                index = n;
+                file.on_bundles_changed();
+            }
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerBundlesFilter(ProgramComparisonDescriptor::File &file)
+{
+    const MatchBundleType type = file.get_selected_bundle_type();
+    const ImGuiSelectionBasicStorage &selection = file.get_bundles_selection(type);
+    const span<const NamedFunctionBundle> bundles = file.get_bundles(type);
+
+    const bool selectionChanged = UpdateFilter(
+        file.m_bundlesFilter,
+        bundles,
+        [](const ImGuiTextFilterEx &filter, const NamedFunctionBundle &bundle) -> bool {
+            return filter.PassFilter(bundle.name);
+        });
+
+    if (selectionChanged)
+    {
+        file.on_bundles_interaction();
     }
 
+    ImGui::Text(
+        "Select Bundle(s) - Count: %d/%d, Selected: %d/%d",
+        file.m_bundlesFilter.filtered.size(),
+        int(bundles.size()),
+        int(file.m_selectedBundles.size()),
+        selection.Size);
+}
+
+void ImGuiApp::ComparisonManagerBundlesLists(ProgramComparisonDescriptor &descriptor)
+{
+    const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos(ImVec2(cursorPos.x, cursorPos.y - 5.0f)); // Hack, removes gap.
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 3), ImVec2(FLT_MAX, FLT_MAX));
+    const ImVec2 defaultSize(0, ImGui::GetTextLineHeightWithSpacing() * 9);
+    ImScoped::Child resizeChild("##bundles_list_resize", defaultSize, ImGuiChildFlags_ResizeY);
+    if (resizeChild.IsContentVisible)
     {
-        ImScoped::Table table("##file_content_table", 2, tableFlags);
+        ImScoped::Table table("##bundles_list_table", 2, ComparisonSplitTableFlags);
         if (table.IsContentVisible)
         {
             ImGui::TableNextRow();
@@ -3042,268 +2220,211 @@ void ImGuiApp::ComparisonManagerBody(ProgramComparisonDescriptor &descriptor)
                 ImScoped::ID id(i);
 
                 ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
-                const ProgramFileRevisionDescriptorPtr &revisionDescriptor = file.m_revisionDescriptor;
 
-                if (revisionDescriptor != nullptr)
-                {
-                    FileManagerDescriptorLoadStatus(*revisionDescriptor);
-                }
-            }
-
-            ImGui::TableNextRow();
-
-            for (size_t i = 0; i < 2; ++i)
-            {
-                ImGui::TableSetColumnIndex(i);
-                ImScoped::ItemWidth item_width(ImGui::GetFontSize() * -12);
-                ImScoped::ID id(i);
-
-                ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
-
-                if (file.bundles_ready())
-                {
-                    // Draw bundles type combo box
-                    {
-                        std::array<const char *, size_t(MatchBundleType::Count)> options;
-                        IndexT count = 0;
-                        if (file.m_compilandBundlesBuilt == TriState::True)
-                            options[count++] = "Compiland Bundles";
-                        if (file.m_sourceFileBundlesBuilt == TriState::True)
-                            options[count++] = "Source File Bundles";
-                        if (file.m_singleBundleBuilt)
-                            options[count++] = "Single Bundle";
-
-                        assert(count > 0);
-                        IndexT &index = file.m_imguiSelectedBundleTypeIdx;
-                        index = std::clamp(index, IndexT(0), count - 1);
-                        const char *preview = options[index];
-
-                        ImScoped::Combo combo("Select Bundle Type", preview);
-                        if (combo.IsOpen)
-                        {
-                            for (IndexT n = 0; n < count; n++)
-                            {
-                                const bool selected = (index == n);
-                                if (ImGui::Selectable(options[n], selected))
-                                {
-                                    index = n;
-                                    file.on_bundles_changed();
-                                }
-                            }
-                        }
-                    }
-
-                    // Draw bundles filter
-                    {
-                        const MatchBundleType type = file.get_selected_bundle_type();
-                        const ImGuiSelectionBasicStorage &selection = file.get_bundles_selection(type);
-                        const span<const NamedFunctionBundle> bundles = file.get_bundles(type);
-
-                        const bool selectionChanged = UpdateFilter(
-                            file.m_bundlesFilter,
-                            bundles,
-                            [](const ImGuiTextFilterEx &filter, const NamedFunctionBundle &bundle) -> bool {
-                                return filter.PassFilter(bundle.name);
-                            });
-
-                        if (selectionChanged)
-                        {
-                            file.on_bundles_interaction();
-                        }
-
-                        ImGui::Text(
-                            "Select Bundle(s) - Count: %d/%d, Selected: %d/%d",
-                            file.m_bundlesFilter.filtered.size(),
-                            int(bundles.size()),
-                            int(file.m_selectedBundles.size()),
-                            selection.Size);
-                    }
-
-                    // TODO: Make box resizable.
-
-                    // Draw bundles multi select box
-                    {
-                        using File = ProgramComparisonDescriptor::File;
-
-                        ImScoped::Child child(
-                            "##bundle_container",
-                            ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 8),
-                            ImGuiChildFlags_FrameStyle | ImGuiChildFlags_AutoResizeY);
-
-                        if (child.IsContentVisible)
-                        {
-                            const MatchBundleType type = file.get_selected_bundle_type();
-                            ImGuiSelectionBasicStorage &selection = file.get_bundles_selection(type);
-                            const int count = file.m_bundlesFilter.filtered.size();
-                            const int oldSelectionSize = selection.Size;
-                            bool selectionChanged = false;
-                            ImGuiMultiSelectIO *ms_io =
-                                ImGui::BeginMultiSelect(ImGuiMultiSelectFlags_BoxSelect1d, selection.Size, count);
-                            selection.UserData = &file;
-                            selection.AdapterIndexToStorageId = [](ImGuiSelectionBasicStorage *self, int idx) -> ImGuiID {
-                                const auto file = static_cast<const File *>(self->UserData);
-                                return ImGuiID(file->get_filtered_bundle(idx).id);
-                            };
-                            selection.ApplyRequests(ms_io);
-
-                            for (int n = 0; n < count; n++)
-                            {
-                                // 1
-                                ImGui::SetNextItemSelectionUserData(n);
-                                // 2
-                                const NamedFunctionBundle &bundle = file.get_filtered_bundle(n);
-                                const File::ListItemUiInfo &uiInfo = file.get_filtered_bundle_ui_info(n);
-
-                                ScopedStyleColor styleColor;
-
-                                if (uiInfo.m_similarity.has_value())
-                                {
-                                    ComparisonManagerItemListStyleColor(styleColor, uiInfo);
-                                }
-
-                                const bool selected = selection.Contains(ImGuiID(bundle.id));
-                                selectionChanged |= ImGui::Selectable(uiInfo.m_label.c_str(), selected);
-                            }
-
-                            ms_io = ImGui::EndMultiSelect();
-                            selection.ApplyRequests(ms_io);
-
-                            if (selectionChanged || oldSelectionSize != selection.Size)
-                            {
-                                file.on_bundles_interaction();
-                            }
-                        }
-                    }
-
-                    // Draw functions filter
-                    {
-                        bool selectionChanged = false;
-
-                        selectionChanged |= ImGui::Checkbox("Show Matched Functions", &file.m_imguiShowMatchedFunctions);
-                        ImGui::SameLine();
-                        selectionChanged |= ImGui::Checkbox("Show Unmatched Functions", &file.m_imguiShowUnmatchedFunctions);
-
-                        if (selectionChanged)
-                        {
-                            file.m_functionIndicesFilter.reset();
-                            file.m_functionIndicesFilter.set_external_filter_condition(
-                                !file.m_imguiShowMatchedFunctions || !file.m_imguiShowUnmatchedFunctions);
-                        }
-
-                        assert(file.m_revisionDescriptor != nullptr);
-                        const span<const IndexT> functionIndices = file.get_active_named_function_indices();
-                        const NamedFunctions &namedFunctions = file.m_revisionDescriptor->m_namedFunctions;
-
-                        selectionChanged |= UpdateFilter(
-                            file.m_functionIndicesFilter,
-                            functionIndices,
-                            [&](const ImGuiTextFilterEx &filter, IndexT index) -> bool {
-                                bool isMatched = file.is_matched_function(index);
-                                if (isMatched && !file.m_imguiShowMatchedFunctions)
-                                    return false;
-                                if (!isMatched && !file.m_imguiShowUnmatchedFunctions)
-                                    return false;
-                                return filter.PassFilter(namedFunctions[index].name);
-                            });
-
-                        if (selectionChanged)
-                        {
-                            on_functions_interaction(descriptor, file);
-                        }
-
-                        ImGui::Text(
-                            "Select Function(s) - Count: %d/%d, Selected: %d/%d",
-                            file.m_functionIndicesFilter.filtered.size(),
-                            int(functionIndices.size()),
-                            int(file.m_selectedNamedFunctionIndices.size()),
-                            file.m_imguiFunctionsSelection.Size);
-                    }
-
-                    // TODO: Make box resizable.
-
-                    // Draw functions multi select box
-                    {
-                        using File = ProgramComparisonDescriptor::File;
-
-                        ImScoped::Child child(
-                            "##function_container",
-                            ImVec2(0, ImGui::GetTextLineHeightWithSpacing() * 8),
-                            ImGuiChildFlags_FrameStyle | ImGuiChildFlags_AutoResizeY);
-
-                        if (child.IsContentVisible)
-                        {
-                            assert(file.m_revisionDescriptor != nullptr);
-                            ImGuiSelectionBasicStorage &selection = file.m_imguiFunctionsSelection;
-                            const NamedFunctions &namedFunctions = file.m_revisionDescriptor->m_namedFunctions;
-                            const int count = file.m_functionIndicesFilter.filtered.size();
-                            const int oldSelectionSize = selection.Size;
-                            bool selectionChanged = false;
-                            ImGuiMultiSelectIO *ms_io =
-                                ImGui::BeginMultiSelect(ImGuiMultiSelectFlags_BoxSelect1d, selection.Size, count);
-                            selection.UserData = &file;
-                            selection.AdapterIndexToStorageId = [](ImGuiSelectionBasicStorage *self, int idx) -> ImGuiID {
-                                const auto file = static_cast<const File *>(self->UserData);
-                                return ImGuiID(file->get_filtered_named_function(idx).id);
-                            };
-                            selection.ApplyRequests(ms_io);
-
-                            for (int n = 0; n < count; n++)
-                            {
-                                // 1
-                                ImGui::SetNextItemSelectionUserData(n);
-                                // 2
-                                const NamedFunction &namedFunction = file.get_filtered_named_function(n);
-                                const File::NamedFunctionUiInfo &uiInfo = file.get_filtered_named_function_ui_info(n);
-
-                                ScopedStyleColor styleColor;
-
-                                if (uiInfo.m_similarity.has_value())
-                                {
-                                    ComparisonManagerItemListStyleColor(styleColor, uiInfo);
-                                }
-
-                                const bool selected = selection.Contains(ImGuiID(namedFunction.id));
-                                selectionChanged |= ImGui::Selectable(uiInfo.m_label.c_str(), selected);
-                            }
-
-                            ms_io = ImGui::EndMultiSelect();
-                            selection.ApplyRequests(ms_io);
-
-                            if (selectionChanged || oldSelectionSize != selection.Size)
-                            {
-                                on_functions_interaction(descriptor, file);
-                            }
-                        }
-                    }
-                }
+                ComparisonManagerBundlesList(file);
             }
         }
     }
 }
 
-void ImGuiApp::ComparisonManagerProgramFileSelection(ProgramComparisonDescriptor::File &file)
+void ImGuiApp::ComparisonManagerBundlesList(ProgramComparisonDescriptor::File &file)
 {
-    ImScoped::Child child("##file_list_container", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY);
-    if (child.IsContentVisible)
+    using File = ProgramComparisonDescriptor::File;
+
+    ImScoped::Child styleChild(
+        "##bundles_list_style",
+        ImVec2(0, 0),
+        ImGuiChildFlags_FrameStyle,
+        ImGuiWindowFlags_HorizontalScrollbar);
+    if (styleChild.IsContentVisible)
     {
-        ImGui::TextUnformatted("Select File");
-        const float column_width = ImGui::GetContentRegionAvail().x;
-        const float column_height = ImGui::GetTextLineHeightWithSpacing() * 8;
-        const ImVec2 size(column_width, column_height);
-        ImScoped::ListBox list_box("##file_list_box", size);
+        const MatchBundleType type = file.get_selected_bundle_type();
+        ImGuiSelectionBasicStorage &selection = file.get_bundles_selection(type);
+        const int count = file.m_bundlesFilter.filtered.size();
+        const int oldSelectionSize = selection.Size;
+        bool selectionChanged = false;
+        ImGuiMultiSelectIO *ms_io = ImGui::BeginMultiSelect(ImGuiMultiSelectFlags_BoxSelect1d, selection.Size, count);
+        selection.UserData = &file;
+        selection.AdapterIndexToStorageId = [](ImGuiSelectionBasicStorage *self, int idx) -> ImGuiID {
+            const auto file = static_cast<const File *>(self->UserData);
+            return ImGuiID(file->get_filtered_bundle(idx).id);
+        };
+        selection.ApplyRequests(ms_io);
 
-        if (list_box.IsContentVisible)
+        for (int n = 0; n < count; n++)
         {
-            const IndexT count = IndexT(m_programFiles.size());
-            for (IndexT n = 0; n < count; ++n)
-            {
-                ProgramFileDescriptor *program_file = m_programFiles[n].get();
-                const std::string name = program_file->create_descriptor_name_with_file_info();
-                const bool selected = (file.m_imguiSelectedFileIdx == n);
+            // 1
+            ImGui::SetNextItemSelectionUserData(n);
+            // 2
+            const NamedFunctionBundle &bundle = file.get_filtered_bundle(n);
+            const File::ListItemUiInfo &uiInfo = file.get_filtered_bundle_ui_info(n);
 
-                if (ImGui::Selectable(name.c_str(), selected))
-                    file.m_imguiSelectedFileIdx = n;
+            ScopedStyleColor styleColor;
+
+            if (uiInfo.m_similarity.has_value())
+            {
+                ComparisonManagerItemListStyleColor(styleColor, uiInfo);
             }
+
+            const bool selected = selection.Contains(ImGuiID(bundle.id));
+            selectionChanged |= ImGui::Selectable(uiInfo.m_label.c_str(), selected);
+        }
+
+        ms_io = ImGui::EndMultiSelect();
+        selection.ApplyRequests(ms_io);
+
+        if (selectionChanged || oldSelectionSize != selection.Size)
+        {
+            file.on_bundles_interaction();
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerFunctionsSettings(ProgramComparisonDescriptor &descriptor)
+{
+    ImScoped::Table table("##functions_filter_table", 2, ComparisonSplitTableFlags);
+    if (table.IsContentVisible)
+    {
+        ImGui::TableNextRow();
+
+        for (size_t i = 0; i < 2; ++i)
+        {
+            ImGui::TableSetColumnIndex(i);
+            ImScoped::ItemWidth item_width(ImGui::GetFontSize() * -12);
+            ImScoped::ID id(i);
+
+            ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
+
+            ComparisonManagerFunctionsFilter(descriptor, file);
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerFunctionsFilter(
+    ProgramComparisonDescriptor &descriptor,
+    ProgramComparisonDescriptor::File &file)
+{
+    bool selectionChanged = false;
+
+    selectionChanged |= ImGui::Checkbox("Show Matched Functions", &file.m_imguiShowMatchedFunctions);
+    ImGui::SameLine();
+    selectionChanged |= ImGui::Checkbox("Show Unmatched Functions", &file.m_imguiShowUnmatchedFunctions);
+
+    if (selectionChanged)
+    {
+        file.m_functionIndicesFilter.reset();
+        file.m_functionIndicesFilter.set_external_filter_condition(
+            !file.m_imguiShowMatchedFunctions || !file.m_imguiShowUnmatchedFunctions);
+    }
+
+    assert(file.m_revisionDescriptor != nullptr);
+    const span<const IndexT> functionIndices = file.get_active_named_function_indices();
+    const NamedFunctions &namedFunctions = file.m_revisionDescriptor->m_namedFunctions;
+
+    selectionChanged |= UpdateFilter(
+        file.m_functionIndicesFilter,
+        functionIndices,
+        [&](const ImGuiTextFilterEx &filter, IndexT index) -> bool {
+            bool isMatched = file.is_matched_function(index);
+            if (isMatched && !file.m_imguiShowMatchedFunctions)
+                return false;
+            if (!isMatched && !file.m_imguiShowUnmatchedFunctions)
+                return false;
+            return filter.PassFilter(namedFunctions[index].name);
+        });
+
+    if (selectionChanged)
+    {
+        on_functions_interaction(descriptor, file);
+    }
+
+    ImGui::Text(
+        "Select Function(s) - Count: %d/%d, Selected: %d/%d",
+        file.m_functionIndicesFilter.filtered.size(),
+        int(functionIndices.size()),
+        int(file.m_selectedNamedFunctionIndices.size()),
+        file.m_imguiFunctionsSelection.Size);
+}
+
+void ImGuiApp::ComparisonManagerFunctionsLists(ProgramComparisonDescriptor &descriptor)
+{
+    const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos(ImVec2(cursorPos.x, cursorPos.y - 5.0f)); // Hack, removes gap.
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 3), ImVec2(FLT_MAX, FLT_MAX));
+    const ImVec2 defaultSize(0, ImGui::GetTextLineHeightWithSpacing() * 9);
+    ImScoped::Child resizeChild("##functions_list_resize", defaultSize, ImGuiChildFlags_ResizeY);
+    if (resizeChild.IsContentVisible)
+    {
+        ImScoped::Table table("##functions_list_table", 2, ComparisonSplitTableFlags);
+        if (table.IsContentVisible)
+        {
+            ImGui::TableNextRow();
+
+            for (size_t i = 0; i < 2; ++i)
+            {
+                ImGui::TableSetColumnIndex(i);
+                ImScoped::ID id(i);
+
+                ProgramComparisonDescriptor::File &file = descriptor.m_files[i];
+
+                ComparisonManagerFunctionsList(descriptor, file);
+            }
+        }
+    }
+}
+
+void ImGuiApp::ComparisonManagerFunctionsList(
+    ProgramComparisonDescriptor &descriptor,
+    ProgramComparisonDescriptor::File &file)
+{
+    using File = ProgramComparisonDescriptor::File;
+
+    ImScoped::Child styleChild(
+        "##functions_list_style",
+        ImVec2(0, 0),
+        ImGuiChildFlags_FrameStyle,
+        ImGuiWindowFlags_HorizontalScrollbar);
+    if (styleChild.IsContentVisible)
+    {
+        assert(file.m_revisionDescriptor != nullptr);
+        ImGuiSelectionBasicStorage &selection = file.m_imguiFunctionsSelection;
+        const NamedFunctions &namedFunctions = file.m_revisionDescriptor->m_namedFunctions;
+        const int count = file.m_functionIndicesFilter.filtered.size();
+        const int oldSelectionSize = selection.Size;
+        bool selectionChanged = false;
+        ImGuiMultiSelectIO *ms_io = ImGui::BeginMultiSelect(ImGuiMultiSelectFlags_BoxSelect1d, selection.Size, count);
+        selection.UserData = &file;
+        selection.AdapterIndexToStorageId = [](ImGuiSelectionBasicStorage *self, int idx) -> ImGuiID {
+            const auto file = static_cast<const File *>(self->UserData);
+            return ImGuiID(file->get_filtered_named_function(idx).id);
+        };
+        selection.ApplyRequests(ms_io);
+
+        for (int n = 0; n < count; n++)
+        {
+            // 1
+            ImGui::SetNextItemSelectionUserData(n);
+            // 2
+            const NamedFunction &namedFunction = file.get_filtered_named_function(n);
+            const File::NamedFunctionUiInfo &uiInfo = file.get_filtered_named_function_ui_info(n);
+
+            ScopedStyleColor styleColor;
+
+            if (uiInfo.m_similarity.has_value())
+            {
+                ComparisonManagerItemListStyleColor(styleColor, uiInfo);
+            }
+
+            const bool selected = selection.Contains(ImGuiID(namedFunction.id));
+            selectionChanged |= ImGui::Selectable(uiInfo.m_label.c_str(), selected);
+        }
+
+        ms_io = ImGui::EndMultiSelect();
+        selection.ApplyRequests(ms_io);
+
+        if (selectionChanged || oldSelectionSize != selection.Size)
+        {
+            on_functions_interaction(descriptor, file);
         }
     }
 }

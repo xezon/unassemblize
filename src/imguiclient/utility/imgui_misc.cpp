@@ -20,6 +20,24 @@ namespace unassemblize::gui
 {
 WindowPlacement g_lastFileDialogPlacement;
 
+ScopedStyleColor::~ScopedStyleColor()
+{
+    if (m_popStyleCount > 0)
+        ImGui::PopStyleColor(m_popStyleCount);
+}
+
+void ScopedStyleColor::PushStyleColor(ImGuiCol idx, ImU32 col)
+{
+    ImGui::PushStyleColor(idx, col);
+    ++m_popStyleCount;
+}
+
+void ScopedStyleColor::PushStyleColor(ImGuiCol idx, const ImVec4 &col)
+{
+    ImGui::PushStyleColor(idx, col);
+    ++m_popStyleCount;
+}
+
 void TextUnformatted(std::string_view view)
 {
     ImGui::TextUnformatted(view.data(), view.data() + view.size());
@@ -119,6 +137,7 @@ void OverlayProgressBar(const ImRect &rect, float fraction, const char *overlay)
     }
 }
 
+// Copied from imgui_internal.h ver 1.91.4
 ImU32 ImAlphaBlendColors(ImU32 col_a, ImU32 col_b)
 {
     float t = ((col_b >> IM_COL32_A_SHIFT) & 0xFF) / 255.f;

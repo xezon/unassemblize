@@ -169,14 +169,14 @@ bool NamedFunction::is_disassembled() const
     return function.get_instruction_count() != 0;
 }
 
-bool NamedFunction::is_linked_to_source_file() const
+TriState NamedFunction::is_linked_to_source_file() const
 {
-    return !function.get_source_file_name().empty();
-}
-
-bool NamedFunction::Has_loaded_source_file() const
-{
-    return has_loaded_source_file;
+    if (!canLinkToSourceFile)
+        return TriState::NotApplicable;
+    if (function.get_source_file_name().empty())
+        return TriState::False;
+    else
+        return TriState::True;
 }
 
 bool NamedFunctionMatchInfo::is_matched() const

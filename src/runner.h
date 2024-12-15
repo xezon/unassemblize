@@ -159,18 +159,18 @@ private:
     static void build_source_lines_for_functions(span<NamedFunction> named_functions, const PdbReader &pdb_reader);
 
     // Note: requires a prior call to build_source_lines_for_functions!
-    static bool load_source_file_for_function(FileContentStorage &storage, NamedFunction &named);
+    static bool load_source_file_for_function(FileContentStorage &storage, const NamedFunction &named);
 
     // Note: requires a prior call to build_source_lines_for_functions!
     static bool load_source_files_for_matched_functions(
         FileContentStorage &storage,
-        NamedFunctionsPair named_functions_pair,
+        ConstNamedFunctionsPair named_functions_pair,
         const MatchedFunctions &matched_functions);
 
     // Note: requires a prior call to build_source_lines_for_functions!
     static bool load_source_files_for_selected_functions(
         FileContentStorage &storage,
-        NamedFunctions &named_functions,
+        const NamedFunctions &named_functions,
         span<const IndexT> named_function_indices);
 
     // Note: requires a prior call to build_source_lines_for_functions!

@@ -12,10 +12,8 @@
  */
 #pragma once
 
-// clang-format off
-#include <imgui_internal.h>
 #include <imgui.h>
-// clang-format on
+#include <imgui_internal.h>
 #include <string>
 #include <string_view>
 
@@ -29,24 +27,11 @@ struct WindowPlacement
 
 struct ScopedStyleColor
 {
-    ScopedStyleColor() {}
-    ~ScopedStyleColor()
-    {
-        if (m_popStyleCount > 0)
-            ImGui::PopStyleColor(m_popStyleCount);
-    }
+    ScopedStyleColor() = default;
+    ~ScopedStyleColor();
 
-    void PushStyleColor(ImGuiCol idx, ImU32 col)
-    {
-        ImGui::PushStyleColor(idx, col);
-        ++m_popStyleCount;
-    }
-
-    void PushStyleColor(ImGuiCol idx, const ImVec4 &col)
-    {
-        ImGui::PushStyleColor(idx, col);
-        ++m_popStyleCount;
-    }
+    void PushStyleColor(ImGuiCol idx, ImU32 col);
+    void PushStyleColor(ImGuiCol idx, const ImVec4 &col);
 
 private:
     int m_popStyleCount = 0;
@@ -65,7 +50,7 @@ void TooltipTextUnformattedMarker(const char *text, const char *text_end = nullp
 
 void OverlayProgressBar(const ImRect &rect, float fraction, const char *overlay = nullptr);
 
-ImU32 ImAlphaBlendColors(ImU32 col_a, ImU32 col_b); // Copied from imgui_internal.h
+ImU32 ImAlphaBlendColors(ImU32 col_a, ImU32 col_b);
 ImU32 CreateColor(ImU32 color, uint8_t alpha);
 
 void DrawInTextCircle(ImU32 color);

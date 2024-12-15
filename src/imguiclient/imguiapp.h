@@ -14,13 +14,12 @@
 
 #include "utility/imgui_misc.h"
 #include "utility/imgui_text_filter.h"
-#include <imgui.h>
 
-#include "filecontentstorage.h"
+#include "programcomparisondescriptor.h"
+#include "programfiledescriptor.h"
+#include "programfilerevisiondescriptor.h"
+
 #include "runnerasync.h"
-
-#include <chrono>
-#include <optional>
 
 struct CommandLineOptions;
 
@@ -46,352 +45,19 @@ class ImGuiApp
         ImGuiTableFlags_NoHostExtendX |
         ImGuiTableFlags_ScrollX |
         ImGuiTableFlags_ScrollY;
+
+    static constexpr ImGuiTableFlags ComparisonSplitTableFlags =
+        ImGuiTableFlags_SizingStretchSame |
+        ImGuiTableFlags_NoBordersInBody |
+        ImGuiTableFlags_NoPadOuterX;
     // clang-format on
 
     static constexpr uint8_t GuiBuildBundleFlags = BuildMatchedFunctionIndices | BuildAllNamedFunctionIndices;
     static constexpr ImU32 RedColor = IM_COL32(255, 0, 0, 255);
     static constexpr ImU32 GreenColor = IM_COL32(0, 255, 0, 255);
     static constexpr std::chrono::system_clock::time_point InvalidTimePoint = std::chrono::system_clock::time_point::min();
-    static constexpr uint32_t InvalidId = 0;
-
-    // Helper struct to keep track of items that are scheduled to be processed just once.
-    struct ProcessedState
-    {
-        void init(size_t maxItemsCount);
-        span<const IndexT> get_items_for_processing(span<const IndexT> indices);
-
-    private:
-        bool set_item_processed(IndexT index);
-        size_t get_processed_item_count() const;
-        span<const IndexT> get_processed_items(size_t begin, size_t end) const;
-
-        // Items that have been processed.
-        std::vector<IndexT> m_processedItems;
-        // Array of bits for all items to keep track of which ones have been processed.
-        std::unique_ptr<uint8_t[]> m_processedItemStates;
-    };
-
-    using ProgramFileId = uint32_t;
-    using ProgramFileRevisionId = uint32_t;
-    using ProgramComparisonId = uint32_t;
-
-    struct ProgramFileDescriptor;
-    struct ProgramFileRevisionDescriptor;
-    struct ProgramComparisonDescriptor;
-
-    using ProgramFileDescriptorPtr = std::unique_ptr<ProgramFileDescriptor>;
-    using ProgramFileRevisionDescriptorPtr = std::shared_ptr<ProgramFileRevisionDescriptor>;
-    using ProgramComparisonDescriptorPtr = std::unique_ptr<ProgramComparisonDescriptor>;
 
     using ProgramFileDescriptorPair = std::array<ProgramFileDescriptor *, 2>;
-
-    struct ProgramFileDescriptor
-    {
-        ProgramFileDescriptor();
-        ~ProgramFileDescriptor();
-
-        bool has_active_command() const;
-        WorkQueueCommandId get_active_command_id() const;
-
-        bool can_load_exe() const;
-        bool can_load_pdb() const;
-        bool can_load() const;
-        bool can_save_exe_config() const;
-        bool can_save_pdb_config() const;
-        bool can_save_config() const;
-
-        bool exe_loaded() const;
-        bool pdb_loaded() const;
-
-        std::string evaluate_exe_filename() const;
-        std::string evaluate_exe_config_filename() const;
-        std::string evaluate_pdb_config_filename() const;
-
-        std::string create_short_exe_name() const;
-        std::string create_descriptor_name() const;
-        std::string create_descriptor_name_with_file_info() const;
-
-        ProgramFileRevisionId get_revision_id() const;
-
-        void create_new_revision_descriptor();
-
-        // Note: All members must be modified by UI thread only
-
-        const ProgramFileId m_id = InvalidId;
-
-        // Must be not editable when the WorkQueue thread works on this descriptor.
-        std::string m_exeFilename;
-        std::string m_exeConfigFilename = auto_str;
-        std::string m_pdbFilename;
-        std::string m_pdbConfigFilename = auto_str;
-
-        TextFilterDescriptor<const ExeSymbol *> m_exeSymbolsFilter = "exe_symbols_filter";
-        TextFilterDescriptor<const PdbSymbolInfo *> m_pdbSymbolsFilter = "pdb_symbols_filter";
-        TextFilterDescriptor<const PdbFunctionInfo *> m_pdbFunctionsFilter = "pdb_functions_filter";
-
-        ProgramFileRevisionDescriptorPtr m_revisionDescriptor;
-
-    private:
-        static ProgramFileId s_id;
-    };
-
-    // Note: Pass down a shared pointer of the ProgramFileRevisionDescriptor when chaining async commands.
-    struct ProgramFileRevisionDescriptor
-    {
-        enum class WorkReason
-        {
-            Load,
-            SaveConfig,
-            BuildNamedFunctions,
-            DisassembleSelectedFunctions,
-            BuildSourceLinesForSelectedFunctions,
-            LoadSourceFilesForSelectedFunctions,
-        };
-
-        ProgramFileRevisionDescriptor();
-        ~ProgramFileRevisionDescriptor();
-
-        void invalidate_command_id();
-        bool has_active_command() const;
-        WorkQueueCommandId get_active_command_id() const;
-
-        bool can_load_exe() const;
-        bool can_load_pdb() const;
-        bool can_save_exe_config() const;
-        bool can_save_pdb_config() const;
-
-        bool exe_loaded() const;
-        bool pdb_loaded() const;
-
-        bool named_functions_built() const;
-
-        std::string evaluate_exe_filename() const;
-        std::string evaluate_exe_config_filename() const;
-        std::string evaluate_pdb_config_filename() const;
-
-        std::string create_short_exe_name() const;
-        std::string create_descriptor_name() const;
-        std::string create_descriptor_name_with_file_info() const;
-
-        const ProgramFileRevisionId m_id = InvalidId;
-
-        // Has pending asynchronous command(s) running when not invalid.
-        WorkQueueCommandId m_activeCommandId = InvalidWorkQueueCommandId; // #TODO Make vector of chained id's?
-        WorkReason m_workReason = {};
-
-        // String copies of the file descriptor at the time of async command chain creation.
-        // These allows to evaluate async save load operations without a dependency to the file descriptor.
-        std::string m_exeFilenameCopy;
-        std::string m_exeConfigFilenameCopy;
-        std::string m_pdbFilenameCopy;
-        std::string m_pdbConfigFilenameCopy;
-
-        std::unique_ptr<Executable> m_executable;
-        std::unique_ptr<PdbReader> m_pdbReader;
-        std::string m_exeFilenameFromPdb;
-        std::string m_exeSaveConfigFilename;
-        std::string m_pdbSaveConfigFilename;
-
-        std::chrono::time_point<std::chrono::system_clock> m_exeLoadTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_exeSaveConfigTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_pdbLoadTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_pdbSaveConfigTimepoint = InvalidTimePoint;
-
-        NamedFunctions m_namedFunctions;
-
-        // Stores named functions that have been async processed already. Links to NamedFunctions.
-        ProcessedState m_processedNamedFunctions;
-
-        FileContentStorage m_fileContentStrorage;
-
-        bool m_namedFunctionsBuilt = false;
-
-    private:
-        static ProgramFileRevisionId s_id;
-    };
-
-    struct ProgramComparisonDescriptor
-    {
-        struct File
-        {
-            enum class WorkReason
-            {
-                BuildMatchedFunctions,
-                BuildCompilandBundles,
-                BuildSourceFileBundles,
-                BuildSingleBundle,
-                BuildComparisonRecordsForSelectedFunctions,
-            };
-
-            struct ListItemUiInfo
-            {
-                void update_info(
-                    const std::string &itemName,
-                    uint32_t itemId,
-                    bool hasMatchedFunction,
-                    std::optional<int8_t> similarity = std::nullopt);
-
-                std::string m_label;
-                std::optional<int8_t> m_similarity = std::nullopt;
-            };
-
-            struct NamedFunctionBundleUiInfo : public ListItemUiInfo
-            {
-            };
-
-            struct NamedFunctionUiInfo : public ListItemUiInfo
-            {
-            };
-
-            using ImGuiBundlesSelectionArray = std::array<ImGuiSelectionBasicStorage, size_t(MatchBundleType::Count)>;
-            using NamedFunctionBundleUiInfos = std::vector<NamedFunctionBundleUiInfo>;
-            using NamedFunctionUiInfos = std::vector<NamedFunctionUiInfo>;
-
-            File();
-
-            void prepare_rebuild();
-            void init();
-
-            void invalidate_command_id();
-            bool has_active_command() const;
-            WorkQueueCommandId get_active_command_id() const;
-
-            bool exe_loaded() const;
-            bool pdb_loaded() const;
-            bool named_functions_built() const;
-            bool bundles_ready() const; // Bundles can be used when this returns true.
-
-            bool is_matched_function(IndexT namedFunctionIndex) const;
-
-            MatchBundleType get_selected_bundle_type() const;
-            span<const NamedFunctionBundle> get_bundles(MatchBundleType type) const;
-            span<NamedFunctionBundleUiInfo> get_bundle_ui_infos(MatchBundleType type);
-            span<const NamedFunctionBundleUiInfo> get_bundle_ui_infos(MatchBundleType type) const;
-            ImGuiSelectionBasicStorage &get_bundles_selection(MatchBundleType type);
-            const NamedFunctionBundle &get_filtered_bundle(int index) const;
-            const NamedFunctionBundleUiInfo &get_filtered_bundle_ui_info(int index) const;
-
-            void on_bundles_changed();
-            void on_bundles_interaction();
-
-            void update_bundle_ui_infos(MatchBundleType type);
-            void update_selected_bundles();
-            void update_active_functions(); // Requires prior call to updated selected bundles.
-            void update_named_function_ui_infos(span<const IndexT> namedFunctionIndices);
-
-            span<const IndexT> get_active_named_function_indices() const;
-            const NamedFunction &get_filtered_named_function(int index) const;
-            const NamedFunctionMatchInfo &get_filtered_named_function_match_info(int index) const;
-            const NamedFunctionUiInfo &get_filtered_named_function_ui_info(int index) const;
-
-            void update_selected_named_functions();
-
-            // Selected file index in list box. Is not reset on rebuild.
-            // Does not necessarily link to current loaded file.
-            IndexT m_imguiSelectedFileIdx = 0;
-
-            // Selected bundle type in combo box. Is not reset on rebuild.
-            IndexT m_imguiSelectedBundleTypeIdx = 0;
-
-            // Functions list options. Is not reset on rebuild.
-            bool m_imguiShowMatchedFunctions = true;
-            bool m_imguiShowUnmatchedFunctions = true;
-
-            // Selected bundles in multi select box. Is not reset on rebuild.
-            ImGuiBundlesSelectionArray m_imguiBundlesSelectionArray;
-
-            // Selected functions in multi select box. Is not reset on rebuild.
-            ImGuiSelectionBasicStorage m_imguiFunctionsSelection;
-
-            TextFilterDescriptor<const NamedFunctionBundle *> m_bundlesFilter = "bundles_filter";
-            TextFilterDescriptor<IndexT> m_functionIndicesFilter = "functions_filter";
-
-            // Has pending asynchronous command(s) running when not invalid.
-            WorkQueueCommandId m_activeCommandId = InvalidWorkQueueCommandId; // #TODO Make vector of chained id's?
-            WorkReason m_workReason = {};
-
-            ProgramFileRevisionDescriptorPtr m_revisionDescriptor;
-
-            NamedFunctionMatchInfos m_namedFunctionMatchInfos;
-            NamedFunctionBundles m_compilandBundles;
-            NamedFunctionBundles m_sourceFileBundles;
-            NamedFunctionBundle m_singleBundle;
-
-            NamedFunctionUiInfos m_namedFunctionUiInfos;
-            NamedFunctionBundleUiInfos m_compilandBundleUiInfos;
-            NamedFunctionBundleUiInfos m_sourceFileBundleUiInfos;
-            NamedFunctionBundleUiInfo m_singleBundleUiInfo;
-
-            TriState m_compilandBundlesBuilt = TriState::False;
-            TriState m_sourceFileBundlesBuilt = TriState::False;
-            bool m_singleBundleBuilt = false;
-
-            // Bundles that are visible and selected in the ui.
-            std::vector<const NamedFunctionBundle *> m_selectedBundles;
-
-            // Named function indices that have been assembled from multiple bundles. Links to NamedFunctions.
-            std::vector<IndexT> m_activeNamedFunctionIndices;
-
-            // Functions that are visible and selected in the ui. Links to NamedFunctions.
-            std::vector<IndexT> m_selectedNamedFunctionIndices;
-        };
-
-        struct FunctionsSimilarityReport
-        {
-            bool has_result() const { return totalSimilarity.has_value(); }
-
-            std::optional<uint32_t> totalSimilarity = std::nullopt; // Accumulative similarity value of matched functions.
-        };
-
-        ProgramComparisonDescriptor();
-        ~ProgramComparisonDescriptor();
-
-        void prepare_rebuild();
-        void init();
-
-        bool has_active_command() const;
-
-        bool executables_loaded() const;
-        bool named_functions_built() const;
-        bool matched_functions_built() const;
-        bool bundles_ready() const;
-
-        // Call relevant File::update_selected_functions before this one.
-        void update_selected_matched_functions();
-
-        void update_all_bundle_ui_infos();
-
-        FunctionsSimilarityReport build_function_similarity_report(span<const IndexT> matchedFunctionIndices);
-
-        void update_matched_named_function_ui_infos(span<const IndexT> matchedFunctionIndices);
-
-        span<const IndexT> get_matched_named_function_indices_for_processing(IndexT side);
-
-        const ProgramComparisonId m_id = InvalidId;
-
-        int m_pendingBuildComparisonRecordsCommands = 0;
-
-        bool m_has_open_window = true;
-        bool m_matchedFunctionsBuilt = false;
-
-        std::array<File, 2> m_files;
-
-        MatchedFunctions m_matchedFunctions;
-
-        // Stores matched functions that have been async processed already. Links to MatchedFunctions.
-        ProcessedState m_processedMatchedFunctions;
-
-        // Matched Functions that are visible and selected in the ui. Links to MatchedFunctions.
-        std::vector<IndexT> m_selectedMatchedFunctionIndices;
-
-    private:
-        static std::vector<IndexT> build_named_function_indices(
-            const MatchedFunctions &matchedFunctions,
-            span<const IndexT> matchedFunctionIndices,
-            IndexT side);
-
-        static ProgramFileId s_id;
-    };
 
 public:
     ImGuiApp();
@@ -467,11 +133,11 @@ private:
         ProgramFileRevisionDescriptorPtr &revisionDescriptor,
         span<const IndexT> namedFunctionIndices);
 
-    void process_named_and_matched_functions_async(
+    void process_matched_functions_async(
         ProgramComparisonDescriptor *comparisonDescriptor,
         span<const IndexT> matchedFunctionIndices);
 
-    void process_matched_functions_async(
+    void process_named_and_matched_functions_async(
         ProgramComparisonDescriptor *comparisonDescriptor,
         span<const IndexT> matchedFunctionIndices);
 
@@ -499,10 +165,12 @@ private:
     void FileManagerDescriptorPdbFile(ProgramFileDescriptor &descriptor);
     void FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor);
     void FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, bool &erased);
+    void FileManagerDescriptorProgressOverlay(const ProgramFileDescriptor &descriptor, const ImRect &rect);
     void FileManagerDescriptorSaveLoadStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerGlobalButtons();
+    void FileManagerInfoNode(ProgramFileDescriptor &fileDescriptor, const ProgramFileRevisionDescriptor &revisionDescriptor);
     void FileManagerInfo(ProgramFileDescriptor &fileDescriptor, const ProgramFileRevisionDescriptor &revisionDescriptor);
     void FileManagerInfoExeSections(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerInfoExeSymbols(
@@ -521,7 +189,21 @@ private:
     void OutputManagerBody();
 
     void ComparisonManagerBody(ProgramComparisonDescriptor &descriptor);
-    void ComparisonManagerProgramFileSelection(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFilesHeaders();
+    void ComparisonManagerFilesLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesList(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFilesActions(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesProgressOverlay(const ProgramComparisonDescriptor &descriptor, const ImRect &rect);
+    void ComparisonManagerFilesStatus(const ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesTypeSelection(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerBundlesFilter(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerBundlesLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesList(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFunctionsSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFunctionsFilter(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFunctionsLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFunctionsList(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
     void ComparisonManagerItemListStyleColor(
         ScopedStyleColor &styleColor,
         const ProgramComparisonDescriptor::File::ListItemUiInfo &uiInfo);

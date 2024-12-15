@@ -105,8 +105,7 @@ struct NamedFunction
     static constexpr Id InvalidId = ~Id(0);
 
     bool is_disassembled() const;
-    bool is_linked_to_source_file() const;
-    bool Has_loaded_source_file() const;
+    TriState is_linked_to_source_file() const;
 
     std::string name;
     Function function;
@@ -114,11 +113,7 @@ struct NamedFunction
     Id id = InvalidId;
 
     // Is set false if function could not be linked to a source file.
-    bool can_link_to_source_file = true;
-
-    // Is set true if a source file load request has succeeded.
-    // The lifetime of the source file is independent and therefore could become out of sync.
-    bool has_loaded_source_file = false;
+    bool canLinkToSourceFile = true;
 };
 using NamedFunctions = std::vector<NamedFunction>;
 using NamedFunctionPair = std::array<NamedFunction *, 2>;
