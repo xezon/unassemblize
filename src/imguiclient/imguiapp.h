@@ -208,7 +208,7 @@ private:
         ScopedStyleColor &styleColor,
         const ProgramComparisonDescriptor::File::ListItemUiInfo &uiInfo);
 
-    void ShowRemoveFileConfirmationPopup(bool &erased);
+    bool ShowRemoveFileConfirmationPopup();
 
 private:
     ImVec2 m_windowPos = ImVec2(0, 0);
