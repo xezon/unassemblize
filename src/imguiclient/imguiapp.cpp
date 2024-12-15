@@ -1369,7 +1369,6 @@ void ImGuiApp::FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor)
 
 bool ImGuiApp::ShowRemoveFileConfirmationPopup()
 {
-    // Center the modal popup
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
@@ -1377,11 +1376,10 @@ bool ImGuiApp::ShowRemoveFileConfirmationPopup()
     if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::TextWrapped("Are you sure you want to remove this file from the list? It does not delete it from disk.");
-        ImGui::Spacing(); // Add some space between the text and buttons
+        ImGui::Spacing();
 
-        // Center the buttons
-        ImVec2 buttonSize(120, 0); // Width of 120, height auto
-        float buttonWidth = ImGui::GetContentRegionAvail().x; // Get available width
+        ImVec2 buttonSize(120, 0);
+        float buttonWidth = ImGui::GetContentRegionAvail().x;
         if (ImGui::Button("OK", buttonSize))
         {
             confirmed = true;
@@ -1416,7 +1414,7 @@ void ImGuiApp::FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, b
             ImGui::OpenPopup("Remove File?");
         }
         bool confirmed = ShowRemoveFileConfirmationPopup();
-        if(confirmed)
+        if (confirmed)
             erased = true;
     }
 
