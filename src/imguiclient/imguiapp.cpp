@@ -1467,6 +1467,11 @@ void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_exeSaveConfigTimepoint).c_str(),
             descriptor.m_exeSaveConfigFilename.c_str());
     }
+    else if (!descriptor.m_exeSaveConfigFilename.empty())
+    {
+        DrawInTextCircle(RedColor);
+        ImGui::Text(" Failed to save Exe Config: [Revision:%u]", descriptor.m_id);
+    }
 
     if (descriptor.m_pdbSaveConfigTimepoint != InvalidTimePoint)
     {
@@ -1477,7 +1482,11 @@ void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_pdbSaveConfigTimepoint).c_str(),
             descriptor.m_pdbSaveConfigFilename.c_str());
     }
-    // #TODO: Also draw fail status.
+    else if (!descriptor.m_pdbSaveConfigFilename.empty())
+    {
+        DrawInTextCircle(RedColor);
+        ImGui::Text(" Failed to save Pdb Config: [Revision:%u]", descriptor.m_id);
+    }
 }
 
 void ImGuiApp::FileManagerGlobalButtons()
