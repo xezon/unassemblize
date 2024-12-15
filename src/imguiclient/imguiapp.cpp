@@ -1443,6 +1443,11 @@ void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
             descriptor.m_executable->get_filename().c_str());
     }
+    else if (!descriptor.m_exeFilenameCopy.empty())
+    {
+        DrawInTextCircle(RedColor);
+        ImGui::Text(" Failed to load Exe: [Revision:%u]", descriptor.m_id);
+    }
 
     if (descriptor.m_pdbReader != nullptr)
     {
@@ -1453,7 +1458,11 @@ void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_pdbLoadTimepoint).c_str(),
             descriptor.m_pdbReader->get_filename().c_str());
     }
-    // #TODO: Also draw fail status.
+    else if (!descriptor.m_pdbFilenameCopy.empty())
+    {
+        DrawInTextCircle(RedColor);
+        ImGui::Text(" Failed to load Pdb: [Revision:%u]", descriptor.m_id);
+    }
 }
 
 void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescriptor &descriptor)
