@@ -13,6 +13,7 @@
  */
 #pragma once
 
+#include <vector>
 #include "commontypes.h"
 #include "util/bitarray.h"
 

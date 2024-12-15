@@ -567,7 +567,7 @@ NamedFunctionBundle Runner::build_bundle(
     const Address64ToIndexMapT &named_function_to_index_map,
     uint8_t flags)
 {
-    const SourceInfoVectorT::value_type &source = sources[source_idx];
+    const typename SourceInfoVectorT::value_type &source = sources[source_idx];
     const IndexT function_count = source.functionIds.size();
     NamedFunctionBundle bundle;
     bundle.id = source_idx;
