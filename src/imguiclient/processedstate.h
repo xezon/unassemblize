@@ -15,6 +15,7 @@
 
 #include "commontypes.h"
 #include "util/bitarray.h"
+#include <vector>
 
 namespace unassemblize::gui
 {
