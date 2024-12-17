@@ -1365,16 +1365,27 @@ void ImGuiApp::FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor)
 bool ImGuiApp::ShowRemoveFileConfirmationPopup()
 {
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    const char *message = "Are you sure you want to remove this file from the list? It does not delete it from disk.";
+    const float minWidth = 300.0f;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(minWidth, 0), ImVec2(FLT_MAX, FLT_MAX));
 
     bool confirmed = false;
     if (ImGui::BeginPopupModal("Remove File?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::TextWrapped("Are you sure you want to remove this file from the list? It does not delete it from disk.");
+        ImGui::TextWrapped(message);
         ImGui::Spacing();
 
-        ImVec2 buttonSize(120, 0);
-        float buttonWidth = ImGui::GetContentRegionAvail().x;
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        float buttonWidth = ImMin(120.0f, (availWidth - ImGui::GetStyle().ItemSpacing.x) / 2);
+        ImVec2 buttonSize(buttonWidth, 0);
+
+        float buttonsWidth = buttonWidth * 2 + ImGui::GetStyle().ItemSpacing.x;
+        float indent = (availWidth - buttonsWidth) * 0.5f;
+        if (indent > 0.0f)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+
         if (ImGui::Button("OK", buttonSize))
         {
             confirmed = true;
