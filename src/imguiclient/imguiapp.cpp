@@ -647,7 +647,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_exeConfigFilenameCopy = descriptor->m_exeConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-            -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
+                -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
     }
 
     if (descriptor->can_save_pdb_config())
@@ -655,7 +655,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_pdbConfigFilenameCopy = descriptor->m_pdbConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-            -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
+                -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
     }
 
     assert(head_command.next_delayed_command != nullptr);
@@ -1443,7 +1443,7 @@ void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
             descriptor.m_executable->get_filename().c_str());
     }
-    else if (!descriptor.m_exeFilenameCopy.empty())
+    else if (!descriptor.m_exeFilenameCopy.empty() && !descriptor.has_async_work())
     {
         DrawInTextCircle(RedColor);
         ImGui::Text(" Failed to load Exe: [Revision:%u]", descriptor.m_id);
@@ -1476,7 +1476,7 @@ void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_exeSaveConfigTimepoint).c_str(),
             descriptor.m_exeSaveConfigFilename.c_str());
     }
-    else if (!descriptor.m_exeSaveConfigFilename.empty())
+    else if (!descriptor.m_exeConfigFilenameCopy.empty() && !descriptor.has_async_work())
     {
         DrawInTextCircle(RedColor);
         ImGui::Text(" Failed to save Exe Config: [Revision:%u]", descriptor.m_id);
@@ -1491,7 +1491,7 @@ void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescript
             create_time_string(descriptor.m_pdbSaveConfigTimepoint).c_str(),
             descriptor.m_pdbSaveConfigFilename.c_str());
     }
-    else if (!descriptor.m_pdbSaveConfigFilename.empty())
+    else if (!descriptor.m_pdbConfigFilenameCopy.empty() && !descriptor.has_async_work())
     {
         DrawInTextCircle(RedColor);
         ImGui::Text(" Failed to save Pdb Config: [Revision:%u]", descriptor.m_id);
