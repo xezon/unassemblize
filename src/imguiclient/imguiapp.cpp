@@ -1222,7 +1222,7 @@ void ImGuiApp::FileManagerBody()
             {
                 bool erased;
                 FileManagerDescriptor(descriptor, erased);
-                if (erased)
+                if (erased && erase_idx == size_t(~0))
                     erase_idx = i;
 
                 if (m_showFileManagerWithTabs)
