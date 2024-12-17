@@ -313,7 +313,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressRelative(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}\"", symbol->name);
+        const std::string format = fmt::format("\"{:s}\"", symbol->name); // #TODO: Upgrade to util::assign_format
         ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
         return ZYAN_STATUS_SUCCESS;
     }
@@ -696,6 +696,7 @@ void Function::set_source_file(const PdbSourceFileInfo &source_file, const PdbSo
 
     m_sourceFileName = source_file.name;
     size_t source_line_index = 0;
+    uint16_t last_line_number = 0;
 
     for (AsmInstructionVariant &variant : m_instructions)
     {
@@ -711,6 +712,11 @@ void Function::set_source_file(const PdbSourceFileInfo &source_file, const PdbSo
                     && instruction->address < m_beginAddress + source_line.offset + source_line.length)
                 {
                     instruction->lineNumber = source_line.lineNumber;
+                    if (last_line_number != source_line.lineNumber)
+                    {
+                        instruction->isFirstLine = true;
+                        last_line_number = source_line.lineNumber;
+                    }
                     break;
                 }
             }
@@ -822,6 +828,7 @@ void Function::disassemble(const FunctionSetup &setup)
         const Address64T instruction_address = runtime_address;
         const Address64T instruction_section_offset = section_offset;
 
+        bool isJumpedTo = false;
         {
             const ExeSymbol *symbol = get_symbol(instruction_address);
             if (symbol != nullptr)
@@ -830,6 +837,7 @@ void Function::disassemble(const FunctionSetup &setup)
                 asm_label.label = symbol->name;
                 m_instructions.emplace_back(std::move(asm_label));
                 ++m_labelCount;
+                isJumpedTo = true;
             }
         }
 
@@ -846,6 +854,7 @@ void Function::disassemble(const FunctionSetup &setup)
         AsmInstruction asm_instruction;
         asm_instruction.address = runtime_address;
         asm_instruction.set_bytes(section_data + instruction_section_offset, instruction.info.length);
+        asm_instruction.isJumpedTo = isJumpedTo;
 
         runtime_address += instruction.info.length;
         section_offset += instruction.info.length;

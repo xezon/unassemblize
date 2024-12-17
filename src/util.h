@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include <fmt/core.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -22,11 +23,25 @@ std::string to_utf8(const wchar_t *utf16);
 std::string to_utf8(const std::wstring &utf16);
 std::wstring to_utf16(const char *utf8);
 std::wstring to_utf16(const std::string &utf8);
-void strip_inplace(std::string &str, std::string_view chars);
-std::string strip(const std::string &str, std::string_view chars);
 std::string get_file_ext(const std::string &file_name);
 std::string to_hex_string(const std::vector<uint8_t> &data);
 std::string abs_path(const std::string &path);
+
+// Efficiently strip characters in place.
+template<typename String>
+void strip_inplace(String &str, std::string_view chars)
+{
+    auto pred = [&chars](const typename String::value_type &c) { return chars.find(c) != String::npos; };
+    str.erase(std::remove_if(str.begin(), str.end(), pred), str.end());
+}
+
+template<typename String>
+String strip(const String &str, std::string_view chars)
+{
+    String s(str);
+    strip_inplace(s, chars);
+    return s;
+}
 
 constexpr char to_lower(char c)
 {
@@ -70,6 +85,27 @@ constexpr int compare_nocase(std::string_view str1, std::string_view str2)
         return 0;
     }
     return (str1.size() < str2.size()) ? -1 : 1;
+}
+
+// Efficiently assign format to std like string.
+template<typename String, typename... Args>
+void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
+{
+    output.resize(max_size);
+    const auto result = fmt::format_to_n(output.begin(), max_size, format, std::forward<Args>(args)...);
+    assert(result.size <= output.size());
+    output.resize(result.size);
+}
+
+// Efficiently append format to std like string.
+template<typename String, typename... Args>
+void append_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
+{
+    size_t start_pos = output.size();
+    output.resize(start_pos + max_size);
+    const auto result = fmt::format_to_n(output.begin() + start_pos, max_size, format, std::forward<Args>(args)...);
+    assert(start_pos + result.size <= output.size());
+    output.resize(start_pos + result.size);
 }
 
 // Efficiently clears a container by swapping with an empty container.
