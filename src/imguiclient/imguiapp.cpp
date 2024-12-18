@@ -863,18 +863,16 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
     {
         descriptor->m_revisionDescriptor->m_exeConfigFilenameCopy = descriptor->m_exeConfigFilename;
         next_command = next_command->chain(
-            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor]() mutable -> WorkQueueCommandPtr {
-                return create_save_exe_config_command(revisionDescriptor);
-            });
+            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
+                -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
     }
 
     if (descriptor->can_save_pdb_config())
     {
         descriptor->m_revisionDescriptor->m_pdbConfigFilenameCopy = descriptor->m_pdbConfigFilename;
         next_command = next_command->chain(
-            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor]() mutable -> WorkQueueCommandPtr {
-                return create_save_pdb_config_command(revisionDescriptor);
-            });
+            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
+                -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
     }
 
     assert(head_command.next_delayed_command != nullptr);
@@ -1410,59 +1408,80 @@ std::string ImGuiApp::create_time_string(std::chrono::time_point<std::chrono::sy
 
 void ImGuiApp::BackgroundWindow()
 {
-    // #TODO: Make the background dockable somehow. There is a example in ImGui Demo > Examples > Dockspace
+    // Configure flags for the background window
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
 
-    // clang-format off
-    constexpr ImGuiWindowFlags window_flags =
-        ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoBackground |
-        ImGuiWindowFlags_MenuBar |
-        ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoDocking;
-    // clang-format on
+    // Get the main viewport
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
 
+    // Set window position and size to cover the entire viewport
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    // Remove window decorations
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize
+        | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+    // Push zero padding to maximize space
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+    // Begin the background window
     bool window_open = true;
-    ImScoped::Window window("main", &window_open, window_flags);
-    if (window.IsContentVisible)
+    ImGui::Begin("DockSpace", &window_open, window_flags);
+
+    // Pop the style variables we pushed
+    ImGui::PopStyleVar(3);
+
+    // Submit the DockSpace
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
     {
-        ImGui::SetWindowPos("main", m_windowPos);
-        ImGui::SetWindowSize("main", ImVec2(m_windowSize.x, 0.f));
-
-        ImScoped::MenuBar menu_bar;
-        if (menu_bar.IsOpen)
-        {
-            {
-                ImScoped::Menu menu("File");
-                if (menu.IsOpen)
-                {
-                    if (ImGui::MenuItem("Exit"))
-                    {
-                        // Will wait for all work to finish and then shutdown the app.
-                        prepare_shutdown_nowait();
-                    }
-                    ImGui::SameLine();
-                    TooltipTextUnformattedMarker("Graceful shutdown. Finishes all tasks before exiting.");
-                }
-            }
-
-            {
-                ImScoped::Menu menu("Tools");
-                if (menu.IsOpen)
-                {
-                    ImGui::MenuItem("Program File Manager", nullptr, &m_showFileManager);
-                    ImGui::MenuItem("Assembler Output", nullptr, &m_showOutputManager);
-
-                    if (ImGui::MenuItem("New Assembler Comparison"))
-                    {
-                        add_program_comparison();
-                    }
-                    ImGui::SameLine();
-                    TooltipTextUnformattedMarker("Opens a new Assembler Comparison window.");
-                }
-            }
-        }
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
     }
+
+    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+        ImGuiStyle &style = ImGui::GetStyle();
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+
+    // Menu bar code
+    if (ImGui::BeginMenuBar())
+    {
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("Exit"))
+            {
+                prepare_shutdown_nowait();
+            }
+            ImGui::SameLine();
+            TooltipTextUnformattedMarker("Graceful shutdown. Finishes all tasks before exiting.");
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Tools"))
+        {
+            ImGui::MenuItem("Program File Manager", nullptr, &m_showFileManager);
+            ImGui::MenuItem("Assembler Output", nullptr, &m_showOutputManager);
+
+            if (ImGui::MenuItem("New Assembler Comparison"))
+            {
+                add_program_comparison();
+            }
+            ImGui::SameLine();
+            TooltipTextUnformattedMarker("Opens a new Assembler Comparison window.");
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+
+    ImGui::End();
 }
 
 void ImGuiApp::FileManagerWindow(bool *p_open)
