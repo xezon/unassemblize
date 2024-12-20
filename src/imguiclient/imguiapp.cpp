@@ -259,7 +259,7 @@ ImGuiStatus ImGuiApp::init(const CommandLineOptions &clo)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+    // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
     // io.ConfigViewportsNoAutoMerge = true;
     // io.ConfigViewportsNoTaskBarIcon = true;
 
@@ -291,12 +291,6 @@ ImGuiStatus ImGuiApp::init(const CommandLineOptions &clo)
 
     // When view ports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     ImGuiStyle &style = ImGui::GetStyle();
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-    }
-
     m_workQueue.start();
 
     for (size_t i = 0; i < CommandLineOptions::MAX_INPUT_FILES; ++i)
@@ -1409,7 +1403,9 @@ std::string ImGuiApp::create_time_string(std::chrono::time_point<std::chrono::sy
 void ImGuiApp::BackgroundWindow()
 {
     // Configure flags for the background window
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar
+        | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+        | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
     // Get the main viewport
     const ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -1419,11 +1415,8 @@ void ImGuiApp::BackgroundWindow()
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
 
-    // Remove window decorations
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize
-        | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
     // Push zero padding to maximize space
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -1441,14 +1434,6 @@ void ImGuiApp::BackgroundWindow()
     {
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-    }
-
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    {
-        ImGuiStyle &style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
 
     // Menu bar code
@@ -1486,9 +1471,8 @@ void ImGuiApp::BackgroundWindow()
 
 void ImGuiApp::FileManagerWindow(bool *p_open)
 {
-    ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
-
-    ImScoped::Window window("File Manager", p_open, ImGuiWindowFlags_MenuBar);
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
+    ImScoped::Window window("File Manager", p_open, window_flags);
     if (window.IsContentVisible)
     {
         FileManagerMenu();
@@ -1511,8 +1495,11 @@ void ImGuiApp::ComparisonManagerWindows()
     for (size_t i = 0; i < count; ++i)
     {
         ProgramComparisonDescriptor &descriptor = *m_programComparisons[i];
+        const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
 
-        if (descriptor.m_imguiComparisonWindowOpened)
+        ImScoped::Window window(title.c_str(), &descriptor.m_imguiHasOpenWindow);
+        ImScoped::ID id(i);
+        if (window.IsContentVisible && descriptor.m_imguiHasOpenWindow)
         {
             // Main window
             {

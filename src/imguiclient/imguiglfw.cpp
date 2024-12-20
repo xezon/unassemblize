@@ -124,10 +124,6 @@ bool ImGuiGLFW::init()
 
     // Configure ImGui
     ImGuiIO &io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
 #ifdef __APPLE__
     io.ConfigMacOSXBehaviors = true;
 #endif
