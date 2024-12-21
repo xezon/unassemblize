@@ -176,8 +176,8 @@ void ProgramFileDescriptor::create_new_revision_descriptor()
 
     m_revisionDescriptor = std::make_shared<ProgramFileRevisionDescriptor>();
     m_revisionDescriptor->m_exeFilenameCopy = m_exeFilename;
+    m_revisionDescriptor->m_exeConfigFilenameCopy = m_exeConfigFilename;
     m_revisionDescriptor->m_pdbFilenameCopy = m_pdbFilename;
-    m_revisionDescriptor->m_exeConfigFilenameCopy.clear();
-    m_revisionDescriptor->m_pdbConfigFilenameCopy.clear();
+    m_revisionDescriptor->m_pdbConfigFilenameCopy = m_pdbConfigFilename;
 }
 } // namespace unassemblize::gui

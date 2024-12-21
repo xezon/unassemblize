@@ -65,12 +65,24 @@ bool ProgramFileRevisionDescriptor::can_save_pdb_config() const
 
 bool ProgramFileRevisionDescriptor::exe_loaded() const
 {
-    return m_executable != nullptr;
+    if (m_executable != nullptr)
+    {
+        assert(m_exeLoaded == TriState::True);
+        return true;
+    }
+    assert(m_exeLoaded != TriState::True);
+    return false;
 }
 
 bool ProgramFileRevisionDescriptor::pdb_loaded() const
 {
-    return m_pdbReader != nullptr;
+    if (m_pdbReader != nullptr)
+    {
+        assert(m_pdbLoaded == TriState::True);
+        return true;
+    }
+    assert(m_pdbLoaded != TriState::True);
+    return false;
 }
 
 bool ProgramFileRevisionDescriptor::named_functions_built() const

@@ -79,6 +79,11 @@ struct ProgramFileRevisionDescriptor
     std::string m_exeSaveConfigFilename;
     std::string m_pdbSaveConfigFilename;
 
+    TriState m_exeLoaded = TriState::NotApplicable;
+    TriState m_pdbLoaded = TriState::NotApplicable;
+    TriState m_exeConfigSaved = TriState::NotApplicable;
+    TriState m_pdbConfigSaved = TriState::NotApplicable;
+
     std::chrono::time_point<std::chrono::system_clock> m_exeLoadTimepoint = InvalidTimePoint;
     std::chrono::time_point<std::chrono::system_clock> m_exeSaveConfigTimepoint = InvalidTimePoint;
     std::chrono::time_point<std::chrono::system_clock> m_pdbLoadTimepoint = InvalidTimePoint;

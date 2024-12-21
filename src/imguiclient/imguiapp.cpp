@@ -224,12 +224,15 @@ WorkQueueCommandPtr ImGuiApp::create_load_exe_command(ProgramFileRevisionDescrip
     command->options.pdb_reader = revisionDescriptor->m_pdbReader.get();
     command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
         auto res = static_cast<AsyncLoadExeResult *>(result.get());
+        const bool loaded = res->executable != nullptr;
         revisionDescriptor->m_executable = std::move(res->executable);
+        revisionDescriptor->m_exeLoaded = loaded ? TriState::True : TriState::False;
         revisionDescriptor->m_exeLoadTimepoint = std::chrono::system_clock::now();
         revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_executable.reset();
+    revisionDescriptor->m_exeLoaded = TriState::NotApplicable;
     revisionDescriptor->m_exeLoadTimepoint = InvalidTimePoint;
     revisionDescriptor->m_exeSaveConfigFilename.clear();
     revisionDescriptor->m_exeSaveConfigTimepoint = InvalidTimePoint;
@@ -246,12 +249,15 @@ WorkQueueCommandPtr ImGuiApp::create_load_pdb_command(ProgramFileRevisionDescrip
 
     command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
         auto res = static_cast<AsyncLoadPdbResult *>(result.get());
+        const bool loaded = res->pdbReader != nullptr;
         revisionDescriptor->m_pdbReader = std::move(res->pdbReader);
+        revisionDescriptor->m_pdbLoaded = loaded ? TriState::True : TriState::False;
         revisionDescriptor->m_pdbLoadTimepoint = std::chrono::system_clock::now();
         revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_pdbReader.reset();
+    revisionDescriptor->m_pdbLoaded = TriState::NotApplicable;
     revisionDescriptor->m_pdbLoadTimepoint = InvalidTimePoint;
     revisionDescriptor->m_pdbSaveConfigFilename.clear();
     revisionDescriptor->m_pdbSaveConfigTimepoint = InvalidTimePoint;
@@ -291,16 +297,15 @@ WorkQueueCommandPtr ImGuiApp::create_save_exe_config_command(ProgramFileRevision
 
     command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
         auto res = static_cast<AsyncSaveExeConfigResult *>(result.get());
-        if (res->success)
-        {
-            auto com = static_cast<AsyncSaveExeConfigCommand *>(result->command.get());
-            revisionDescriptor->m_exeSaveConfigFilename = util::abs_path(com->options.config_file);
-            revisionDescriptor->m_exeSaveConfigTimepoint = std::chrono::system_clock::now();
-        }
+        auto com = static_cast<AsyncSaveExeConfigCommand *>(result->command.get());
+        revisionDescriptor->m_exeSaveConfigFilename = util::abs_path(com->options.config_file);
+        revisionDescriptor->m_exeConfigSaved = res->success ? TriState::True : TriState::False;
+        revisionDescriptor->m_exeSaveConfigTimepoint = std::chrono::system_clock::now();
         revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_exeSaveConfigFilename.clear();
+    revisionDescriptor->m_exeConfigSaved = TriState::NotApplicable;
     revisionDescriptor->m_exeSaveConfigTimepoint = InvalidTimePoint;
     revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::SaveConfig);
 
@@ -317,16 +322,15 @@ WorkQueueCommandPtr ImGuiApp::create_save_pdb_config_command(ProgramFileRevision
 
     command->callback = [revisionDescriptor](WorkQueueResultPtr &result) {
         auto res = static_cast<AsyncSavePdbConfigResult *>(result.get());
-        if (res->success)
-        {
-            auto com = static_cast<AsyncSavePdbConfigCommand *>(result->command.get());
-            revisionDescriptor->m_pdbSaveConfigFilename = util::abs_path(com->options.config_file);
-            revisionDescriptor->m_pdbSaveConfigTimepoint = std::chrono::system_clock::now();
-        }
+        auto com = static_cast<AsyncSavePdbConfigCommand *>(result->command.get());
+        revisionDescriptor->m_pdbSaveConfigFilename = util::abs_path(com->options.config_file);
+        revisionDescriptor->m_pdbConfigSaved = res->success ? TriState::True : TriState::False;
+        revisionDescriptor->m_pdbSaveConfigTimepoint = std::chrono::system_clock::now();
         revisionDescriptor->remove_async_work_hint(result->command->command_id);
     };
 
     revisionDescriptor->m_pdbSaveConfigFilename.clear();
+    revisionDescriptor->m_pdbConfigSaved = TriState::NotApplicable;
     revisionDescriptor->m_pdbSaveConfigTimepoint = InvalidTimePoint;
     revisionDescriptor->add_async_work_hint(command->command_id, ProgramFileRevisionDescriptor::WorkReason::SaveConfig);
 
@@ -649,7 +653,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_exeConfigFilenameCopy = descriptor->m_exeConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-                -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
+            -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
     }
 
     if (descriptor->can_save_pdb_config())
@@ -657,7 +661,7 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
         descriptor->m_revisionDescriptor->m_pdbConfigFilenameCopy = descriptor->m_pdbConfigFilename;
         next_command = next_command->chain(
             [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-                -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
+            -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
     }
 
     assert(head_command.next_delayed_command != nullptr);
@@ -1441,67 +1445,91 @@ void ImGuiApp::FileManagerDescriptorSaveLoadStatus(const ProgramFileRevisionDesc
 
 void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescriptor &descriptor)
 {
-    if (descriptor.m_executable != nullptr)
+    switch (descriptor.m_exeLoaded)
     {
-        DrawInTextCircle(GreenColor);
-        ImGui::Text(
-            " Loaded Exe: [Revision:%u] [%s] %s",
-            descriptor.m_id,
-            create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
-            descriptor.m_executable->get_filename().c_str());
-    }
-    else if (!descriptor.m_exeFilenameCopy.empty() && !descriptor.has_async_work())
-    {
-        DrawInTextCircle(RedColor);
-        ImGui::Text(" Failed to load Exe: [Revision:%u]", descriptor.m_id);
+        case TriState::True:
+            DrawInTextCircle(GreenColor);
+            ImGui::Text(
+                " Loaded Exe: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
+                descriptor.m_executable->get_filename().c_str());
+            break;
+
+        case TriState::False:
+            DrawInTextCircle(RedColor);
+            ImGui::Text(
+                " Failed to load Exe: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
+                descriptor.m_exeFilenameCopy);
+            break;
     }
 
-    if (descriptor.m_pdbReader != nullptr)
+    switch (descriptor.m_pdbLoaded)
     {
-        DrawInTextCircle(GreenColor);
-        ImGui::Text(
-            " Loaded Pdb: [Revision:%u] [%s] %s",
-            descriptor.m_id,
-            create_time_string(descriptor.m_pdbLoadTimepoint).c_str(),
-            descriptor.m_pdbReader->get_filename().c_str());
-    }
-    else if (!descriptor.m_pdbFilenameCopy.empty())
-    {
-        DrawInTextCircle(RedColor);
-        ImGui::Text(" Failed to load Pdb: [Revision:%u]", descriptor.m_id);
+        case TriState::True:
+            DrawInTextCircle(GreenColor);
+            ImGui::Text(
+                " Loaded Pdb: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_pdbLoadTimepoint).c_str(),
+                descriptor.m_pdbReader->get_filename().c_str());
+            break;
+
+        case TriState::False:
+            DrawInTextCircle(RedColor);
+            ImGui::Text(
+                " Failed to load Pdb: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_pdbLoadTimepoint).c_str(),
+                descriptor.m_pdbFilenameCopy);
+            break;
     }
 }
 
 void ImGuiApp::FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescriptor &descriptor)
 {
-    if (descriptor.m_exeSaveConfigTimepoint != InvalidTimePoint)
+    switch (descriptor.m_exeConfigSaved)
     {
-        DrawInTextCircle(GreenColor);
-        ImGui::Text(
-            " Saved Exe Config: [Revision:%u] [%s] %s",
-            descriptor.m_id,
-            create_time_string(descriptor.m_exeSaveConfigTimepoint).c_str(),
-            descriptor.m_exeSaveConfigFilename.c_str());
-    }
-    else if (!descriptor.m_exeConfigFilenameCopy.empty() && !descriptor.has_async_work())
-    {
-        DrawInTextCircle(RedColor);
-        ImGui::Text(" Failed to save Exe Config: [Revision:%u]", descriptor.m_id);
+        case TriState::True:
+            DrawInTextCircle(GreenColor);
+            ImGui::Text(
+                " Saved Exe Config: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_exeSaveConfigTimepoint).c_str(),
+                descriptor.m_exeSaveConfigFilename.c_str());
+            break;
+
+        case TriState::False:
+            DrawInTextCircle(RedColor);
+            ImGui::Text(
+                " Failed to save Exe Config: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_exeSaveConfigTimepoint).c_str(),
+                descriptor.m_exeSaveConfigFilename.c_str());
+            break;
     }
 
-    if (descriptor.m_pdbSaveConfigTimepoint != InvalidTimePoint)
+    switch (descriptor.m_pdbConfigSaved)
     {
-        DrawInTextCircle(GreenColor);
-        ImGui::Text(
-            " Saved Pdb Config: [Revision:%u] [%s] %s",
-            descriptor.m_id,
-            create_time_string(descriptor.m_pdbSaveConfigTimepoint).c_str(),
-            descriptor.m_pdbSaveConfigFilename.c_str());
-    }
-    else if (!descriptor.m_pdbConfigFilenameCopy.empty() && !descriptor.has_async_work())
-    {
-        DrawInTextCircle(RedColor);
-        ImGui::Text(" Failed to save Pdb Config: [Revision:%u]", descriptor.m_id);
+        case TriState::True:
+            DrawInTextCircle(GreenColor);
+            ImGui::Text(
+                " Saved Pdb Config: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_pdbSaveConfigTimepoint).c_str(),
+                descriptor.m_pdbSaveConfigFilename.c_str());
+            break;
+
+        case TriState::False:
+            DrawInTextCircle(RedColor);
+            ImGui::Text(
+                " Failed to save Pdb Config: [Revision:%u] [%s] %s",
+                descriptor.m_id,
+                create_time_string(descriptor.m_pdbSaveConfigTimepoint).c_str(),
+                descriptor.m_pdbSaveConfigFilename.c_str());
+            break;
     }
 }
 
