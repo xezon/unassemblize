@@ -65,7 +65,7 @@ private:
         const InstructionTextArray *array1 = nullptr);
 
     static bool has_jump_len_mismatch(const AsmInstruction &instruction0, const AsmInstruction &instruction1);
-    static AsmMismatchInfo compare_asm_text(const std::string &text0, const std::string &text1);
+    static AsmMismatchInfo compare_asm_text(std::string_view text0, std::string_view text1);
     static AsmMismatchInfo compare_asm_text(const InstructionTextArray &array0, const InstructionTextArray &array1);
     static SkipSymbolResult skip_unknown_symbol(const char *str);
     static const char *skip_known_symbol(const char *str);
@@ -75,7 +75,7 @@ private:
      * "mov dword ptr[eax], 0x10" becomes {"mov", "dword ptr[eax]", "0x10"}
      */
     static InstructionTextArrays split_instruction_texts(const AsmInstructionVariants &instructions);
-    static InstructionTextArray split_instruction_text(const std::string &text);
+    static InstructionTextArray split_instruction_text(std::string_view text);
 
     static AsmInstructionVariant s_nullInstructionVariant;
 };

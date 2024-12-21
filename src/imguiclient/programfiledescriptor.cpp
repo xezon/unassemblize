@@ -100,7 +100,7 @@ std::string ProgramFileDescriptor::evaluate_exe_filename() const
         if (m_revisionDescriptor != nullptr)
             return m_revisionDescriptor->m_exeFilenameFromPdb;
         else
-            return std::string();
+            return {};
     }
     else
     {

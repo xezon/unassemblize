@@ -170,7 +170,7 @@ private:
         const void *buffer,
         ZyanUSize length,
         ZydisDisassembledInstruction &instruction,
-        std::string &instruction_buffer,
+        span<char> instruction_buffer,
         void *user_data);
 
 private:

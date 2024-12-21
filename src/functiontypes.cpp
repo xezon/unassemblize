@@ -16,7 +16,7 @@
 
 namespace unassemblize
 {
-AsmFormat to_asm_format(const char *str)
+AsmFormat to_asm_format(std::string_view str)
 {
     if (util::equals_nocase(str, "igas"))
     {
@@ -36,7 +36,7 @@ AsmFormat to_asm_format(const char *str)
     }
     else
     {
-        printf("Unrecognized asm format '%s'. Defaulting to 'DEFAULT'", str);
+        printf("Unrecognized asm format '%.*s'. Defaulting to 'DEFAULT'", PRINTF_STRING(str));
         return AsmFormat::DEFAULT;
     }
     static_assert(size_t(AsmFormat::DEFAULT) == 3, "Enum was changed. Update switch case.");

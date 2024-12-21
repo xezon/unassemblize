@@ -37,7 +37,7 @@ enum class AsmFormat
     DEFAULT,
 };
 
-AsmFormat to_asm_format(const char *str);
+AsmFormat to_asm_format(std::string_view str);
 
 /*
  * Intermediate instruction data between Zydis disassemble and final text generation.
@@ -51,9 +51,11 @@ struct AsmInstruction
         address = 0;
         std::fill_n(bytes.elements.data(), bytes.elements.size(), 0);
         isJump = false;
+        isJumpedTo = false;
         isInvalid = false;
-        lineNumber = 0;
+        isFirstLine = false;
         jumpLen = 0;
+        lineNumber = 0;
     }
 
     void set_bytes(const uint8_t *p, size_t size);
@@ -62,7 +64,9 @@ struct AsmInstruction
     Address64T address; // Position of the instruction within the executable.
     BytesArray bytes;
     bool isJump : 1; // Instruction is a jump.
+    bool isJumpedTo : 1; // Instruction is jumped to or called.
     bool isInvalid : 1; // Instruction was not read or formatted correctly.
+    bool isFirstLine : 1; // This instruction is the first one that corresponds to its line number.
     union
     {
         int16_t jumpLen; // Jump length in bytes.

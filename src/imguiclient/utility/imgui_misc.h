@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include "util/nocopy.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <string>
@@ -25,21 +26,21 @@ struct WindowPlacement
     ImVec2 size = ImVec2(-FLT_MAX, -FLT_MAX);
 };
 
-struct ScopedStyleColor
+struct ScopedStyleColor : NoCopyNoMove
 {
     ScopedStyleColor() = default;
     ~ScopedStyleColor();
 
-    void PushStyleColor(ImGuiCol idx, ImU32 col);
-    void PushStyleColor(ImGuiCol idx, const ImVec4 &col);
+    void Push(ImGuiCol idx, ImU32 col);
+    void Push(ImGuiCol idx, const ImVec4 &col);
+    void PopAll();
 
 private:
     int m_popStyleCount = 0;
 };
 
-extern WindowPlacement g_lastFileDialogPlacement;
-
 void TextUnformatted(std::string_view view);
+void TextUnformattedCenteredX(std::string_view view, float width_x = 0.f);
 
 void TooltipText(const char *fmt, ...);
 void TooltipTextV(const char *fmt, va_list args);
@@ -55,16 +56,39 @@ ImU32 CreateColor(ImU32 color, uint8_t alpha);
 
 void DrawInTextCircle(ImU32 color);
 
-ImVec2 OuterSizeForTable(size_t show_table_len, size_t table_len);
-
-void ApplyPlacementToNextWindow(WindowPlacement &placement);
+bool ApplyPlacementToNextWindow(WindowPlacement &placement);
 void FetchPlacementFromWindowByName(WindowPlacement &placement, const char *window_name);
+void FetchPlacementFromCurrentWindow(WindowPlacement &placement);
 
-void AddFileDialogButton(
+void UpdateFileDialog(
+    bool open,
     std::string *file_path_name,
-    std::string_view button_label,
     const std::string &key,
     const std::string &title,
     const char *filters);
+
+bool UpdateConfirmationPopup(bool open, const char *name, const char *message);
+
+// Calculate a default table height.
+template<bool TableUsesHeader = true>
+float GetDefaultTableHeight(size_t max_rows, size_t default_rows)
+{
+    size_t extra = 0;
+    if constexpr (TableUsesHeader)
+        ++extra;
+    return ImGui::GetTextLineHeightWithSpacing() * (std::min<size_t>(max_rows, default_rows) + extra);
+}
+
+// Calculate a max table height.
+template<bool TableUsesHeader = true, bool TableUsesHorizontalScroll = true>
+float GetMaxTableHeight(size_t max_rows)
+{
+    size_t extra = 0;
+    if constexpr (TableUsesHeader)
+        ++extra;
+    if constexpr (TableUsesHorizontalScroll)
+        ++extra;
+    return ImGui::GetTextLineHeightWithSpacing() * (max_rows + extra);
+}
 
 } // namespace unassemblize::gui

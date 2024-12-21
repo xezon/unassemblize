@@ -18,29 +18,52 @@
 
 namespace unassemblize::gui
 {
-WindowPlacement g_lastFileDialogPlacement;
+static WindowPlacement g_lastFileDialogPlacement;
+static WindowPlacement g_lastConfirmationDialogPlacement;
 
 ScopedStyleColor::~ScopedStyleColor()
 {
+    PopAll();
+}
+
+void ScopedStyleColor::Push(ImGuiCol idx, ImU32 col)
+{
+    ImGui::PushStyleColor(idx, col);
+    ++m_popStyleCount;
+}
+
+void ScopedStyleColor::Push(ImGuiCol idx, const ImVec4 &col)
+{
+    ImGui::PushStyleColor(idx, col);
+    ++m_popStyleCount;
+}
+
+void ScopedStyleColor::PopAll()
+{
     if (m_popStyleCount > 0)
+    {
         ImGui::PopStyleColor(m_popStyleCount);
-}
-
-void ScopedStyleColor::PushStyleColor(ImGuiCol idx, ImU32 col)
-{
-    ImGui::PushStyleColor(idx, col);
-    ++m_popStyleCount;
-}
-
-void ScopedStyleColor::PushStyleColor(ImGuiCol idx, const ImVec4 &col)
-{
-    ImGui::PushStyleColor(idx, col);
-    ++m_popStyleCount;
+        m_popStyleCount = 0;
+    }
 }
 
 void TextUnformatted(std::string_view view)
 {
     ImGui::TextUnformatted(view.data(), view.data() + view.size());
+}
+
+void TextUnformattedCenteredX(std::string_view view, float width_x)
+{
+    if (width_x == 0.f)
+    {
+        width_x = ImGui::GetContentRegionAvail().x;
+    }
+    const ImVec2 text_size = ImGui::CalcTextSize(view.data(), view.data() + view.size());
+    const float text_x = (width_x - text_size.x) / 2.0f;
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + text_x);
+
+    TextUnformatted(view);
 }
 
 void TooltipText(const char *fmt, ...)
@@ -165,18 +188,15 @@ void DrawInTextCircle(ImU32 color)
     ImGui::SetCursorScreenPos(ImVec2(pos.x + font_size.x, pos.y));
 }
 
-ImVec2 OuterSizeForTable(size_t show_table_len, size_t table_len)
-{
-    return ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * std::min<size_t>(show_table_len, table_len));
-}
-
-void ApplyPlacementToNextWindow(WindowPlacement &placement)
+bool ApplyPlacementToNextWindow(WindowPlacement &placement)
 {
     if (placement.pos.x != -FLT_MAX)
     {
-        ImGui::SetNextWindowPos(placement.pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(placement.size, ImGuiCond_Always);
+        ImGui::SetNextWindowPos(placement.pos, ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(placement.size, ImGuiCond_Appearing);
+        return true;
     }
+    return false;
 }
 
 void FetchPlacementFromWindowByName(WindowPlacement &placement, const char *window_name)
@@ -189,20 +209,32 @@ void FetchPlacementFromWindowByName(WindowPlacement &placement, const char *wind
     }
 }
 
-void AddFileDialogButton(
+void FetchPlacementFromCurrentWindow(WindowPlacement &placement)
+{
+    placement.pos = ImGui::GetWindowPos();
+    placement.size = ImGui::GetWindowSize();
+}
+
+void UpdateFileDialog(
+    bool open,
     std::string *file_path_name,
-    std::string_view button_label,
     const std::string &key,
     const std::string &title,
     const char *filters)
 {
+    constexpr ImVec2 minSize(600.f, 300.f);
     IGFD::FileDialog *instance = ImGuiFileDialog::Instance();
 
-    const std::string button_label_key = fmt::format("{:s}##{:s}", button_label, key);
-    if (ImGui::Button(button_label_key.c_str()))
+    if (open)
     {
         // Restore position and size of any last file dialog.
-        ApplyPlacementToNextWindow(g_lastFileDialogPlacement);
+        if (!ApplyPlacementToNextWindow(g_lastFileDialogPlacement))
+        {
+            // If it is the first opened dialog, then center and resize it.
+            const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+            ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(minSize, ImGuiCond_Appearing);
+        }
 
         IGFD::FileDialogConfig config;
         config.path = ".";
@@ -210,10 +242,10 @@ void AddFileDialogButton(
         instance->OpenDialog(key, title, filters, config);
     }
 
-    if (instance->Display(key, ImGuiWindowFlags_NoCollapse, ImVec2(600, 300)))
+    if (instance->Display(key, ImGuiWindowFlags_NoCollapse, minSize))
     {
         // Note: Is using internals of ImGuiFileDialog
-        const std::string window_name = title + "##" + key;
+        const std::string window_name = fmt::format("{:s}##{:s}", title, key);
         FetchPlacementFromWindowByName(g_lastFileDialogPlacement, window_name.c_str());
 
         if (instance->IsOk())
@@ -223,4 +255,59 @@ void AddFileDialogButton(
         instance->Close();
     }
 }
+
+bool UpdateConfirmationPopup(bool open, const char *name, const char *message)
+{
+    bool confirmed = false;
+
+    if (open)
+    {
+        ImGui::OpenPopup(name);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
+
+        // Restore position and size of any last confirmation dialog.
+        if (!ApplyPlacementToNextWindow(g_lastConfirmationDialogPlacement))
+        {
+            // If it is the first opened dialog, then center it.
+            const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+            ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        }
+    }
+
+    if (ImGui::BeginPopupModal(name, NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        FetchPlacementFromCurrentWindow(g_lastConfirmationDialogPlacement);
+
+        ImGui::TextWrapped(message);
+        ImGui::Spacing();
+
+        const float availWidth = ImGui::GetContentRegionAvail().x;
+        const float buttonWidth = ImMin(120.0f, (availWidth - ImGui::GetStyle().ItemSpacing.x) / 2);
+        const ImVec2 buttonSize(buttonWidth, 0.0f);
+
+        // Center the 2 buttons in the dialog.
+        const float buttonsWidth = buttonWidth * 2 + ImGui::GetStyle().ItemSpacing.x;
+        const float indent = (availWidth - buttonsWidth) * 0.5f;
+        if (indent > 0.0f)
+        {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indent);
+        }
+
+        if (ImGui::Button("OK", buttonSize))
+        {
+            confirmed = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SetItemDefaultFocus();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", buttonSize))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+    return confirmed;
+}
+
 } // namespace unassemblize::gui

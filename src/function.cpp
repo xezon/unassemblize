@@ -261,8 +261,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressAbsolute(
             {
                 ZYAN_CHECK(ZyanStringAppendFormat(string, "short "));
             }
-            const std::string format = fmt::format("\"{:s}\"", symbol->name);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s\"", PRINTF_STRING(symbol->name)));
             return ZYAN_STATUS_SUCCESS;
         }
 
@@ -272,8 +271,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressAbsolute(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_sub, address);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_sub), address));
             return ZYAN_STATUS_SUCCESS;
         }
 
@@ -283,8 +281,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressAbsolute(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_off, address);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_off), address));
             return ZYAN_STATUS_SUCCESS;
         }
     }
@@ -313,8 +310,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressRelative(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}\"", symbol->name);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s\"", PRINTF_STRING(symbol->name)));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -324,8 +320,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressRelative(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_sub, address);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_sub), address));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -335,8 +330,7 @@ ZyanStatus Function::UnasmFormatterPrintAddressRelative(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_off, address);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_off), address));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -375,8 +369,7 @@ ZyanStatus Function::UnasmFormatterPrintDISP(
                 ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
                 ZyanString *string;
                 ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-                const std::string format = fmt::format("+\"{:s}\"", symbol->name);
-                ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+                ZYAN_CHECK(ZyanStringAppendFormat(string, "+\"%.*s\"", PRINTF_STRING(symbol->name)));
                 return ZYAN_STATUS_SUCCESS;
             }
         }
@@ -387,8 +380,7 @@ ZyanStatus Function::UnasmFormatterPrintDISP(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("+\"{:s}{:x}\"", s_prefix_sub, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "+\"%.*s%llx\"", PRINTF_STRING(s_prefix_sub), value));
             return ZYAN_STATUS_SUCCESS;
         }
 
@@ -398,8 +390,7 @@ ZyanStatus Function::UnasmFormatterPrintDISP(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("+\"{:s}{:x}\"", s_prefix_off, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "+\"%.*s%llx\"", PRINTF_STRING(s_prefix_off), value));
             return ZYAN_STATUS_SUCCESS;
         }
     }
@@ -435,8 +426,7 @@ ZyanStatus Function::UnasmFormatterPrintIMM(
                 ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
                 ZyanString *string;
                 ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-                const std::string format = fmt::format("offset \"{:s}\"", symbol->name);
-                ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+                ZYAN_CHECK(ZyanStringAppendFormat(string, "offset \"%.*s\"", PRINTF_STRING(symbol->name)));
                 return ZYAN_STATUS_SUCCESS;
             }
         }
@@ -447,8 +437,7 @@ ZyanStatus Function::UnasmFormatterPrintIMM(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("offset \"{:s}{:x}\"", s_prefix_sub, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "offset \"%.*s%llx\"", PRINTF_STRING(s_prefix_sub), value));
             return ZYAN_STATUS_SUCCESS;
         }
 
@@ -458,8 +447,7 @@ ZyanStatus Function::UnasmFormatterPrintIMM(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("offset \"{:s}{:x}\"", s_prefix_off, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "offset \"%.*s%llx\"", PRINTF_STRING(s_prefix_off), value));
             return ZYAN_STATUS_SUCCESS;
         }
     }
@@ -487,8 +475,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandPTR(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}\"", symbol->name);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s\"", PRINTF_STRING(symbol->name)));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -498,8 +485,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandPTR(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_sub, offset);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_sub), offset));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -509,8 +495,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandPTR(
         ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
         ZyanString *string;
         ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-        const std::string format = fmt::format("\"{:s}{:x}\"", s_prefix_unk, offset);
-        ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+        ZYAN_CHECK(ZyanStringAppendFormat(string, "\"%.*s%llx\"", PRINTF_STRING(s_prefix_unk), offset));
         return ZYAN_STATUS_SUCCESS;
     }
 
@@ -555,8 +540,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandMEM(
                 ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
                 ZyanString *string;
                 ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-                const std::string format = fmt::format("[\"{:s}\"]", symbol->name);
-                ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+                ZYAN_CHECK(ZyanStringAppendFormat(string, "[\"%.*s\"]", PRINTF_STRING(symbol->name)));
                 return ZYAN_STATUS_SUCCESS;
             }
         }
@@ -573,8 +557,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandMEM(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("[\"{:s}{:x}\"]", s_prefix_sub, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "[\"%.*s%llx\"]", PRINTF_STRING(s_prefix_sub), value));
             return ZYAN_STATUS_SUCCESS;
         }
 
@@ -590,8 +573,7 @@ ZyanStatus Function::UnasmFormatterFormatOperandMEM(
             ZYAN_CHECK(ZydisFormatterBufferAppend(buffer, ZYDIS_TOKEN_SYMBOL));
             ZyanString *string;
             ZYAN_CHECK(ZydisFormatterBufferGetString(buffer, &string));
-            const std::string format = fmt::format("[\"{:s}{:x}\"]", s_prefix_unk, value);
-            ZYAN_CHECK(ZyanStringAppendFormat(string, format.c_str()));
+            ZYAN_CHECK(ZyanStringAppendFormat(string, "[\"%.*s%llx\"]", PRINTF_STRING(s_prefix_unk), value));
             return ZYAN_STATUS_SUCCESS;
         }
     }
@@ -653,7 +635,7 @@ ZyanStatus Function::UnasmDisassembleCustom(
     const void *buffer,
     ZyanUSize length,
     ZydisDisassembledInstruction &instruction,
-    std::string &instruction_buffer,
+    span<char> instruction_buffer,
     void *user_data)
 {
     assert(buffer != nullptr);
@@ -671,7 +653,7 @@ ZyanStatus Function::UnasmDisassembleCustom(
         &instruction.info,
         instruction.operands,
         instruction.info.operand_count_visible,
-        &instruction_buffer[0],
+        instruction_buffer.data(),
         instruction_buffer.size(),
         runtime_address,
         user_data));
@@ -696,6 +678,7 @@ void Function::set_source_file(const PdbSourceFileInfo &source_file, const PdbSo
 
     m_sourceFileName = source_file.name;
     size_t source_line_index = 0;
+    uint16_t last_line_number = 0;
 
     for (AsmInstructionVariant &variant : m_instructions)
     {
@@ -711,6 +694,11 @@ void Function::set_source_file(const PdbSourceFileInfo &source_file, const PdbSo
                     && instruction->address < m_beginAddress + source_line.offset + source_line.length)
                 {
                     instruction->lineNumber = source_line.lineNumber;
+                    if (last_line_number != source_line.lineNumber)
+                    {
+                        instruction->isFirstLine = true;
+                        last_line_number = source_line.lineNumber;
+                    }
                     break;
                 }
             }
@@ -758,9 +746,8 @@ void Function::disassemble(const FunctionSetup &setup)
     const Address64T section_size = section_info->size;
 
     ZydisDisassembledInstruction instruction;
-    std::string instruction_buffer;
-    instruction_buffer.resize(1024);
-
+    char instruction_buffer[4096];
+    instruction_buffer[0] = '\0';
     size_t instruction_count = 0;
     size_t label_count = 0;
 
@@ -822,6 +809,7 @@ void Function::disassemble(const FunctionSetup &setup)
         const Address64T instruction_address = runtime_address;
         const Address64T instruction_section_offset = section_offset;
 
+        bool isJumpedTo = false;
         {
             const ExeSymbol *symbol = get_symbol(instruction_address);
             if (symbol != nullptr)
@@ -830,6 +818,7 @@ void Function::disassemble(const FunctionSetup &setup)
                 asm_label.label = symbol->name;
                 m_instructions.emplace_back(std::move(asm_label));
                 ++m_labelCount;
+                isJumpedTo = true;
             }
         }
 
@@ -846,6 +835,7 @@ void Function::disassemble(const FunctionSetup &setup)
         AsmInstruction asm_instruction;
         asm_instruction.address = runtime_address;
         asm_instruction.set_bytes(section_data + instruction_section_offset, instruction.info.length);
+        asm_instruction.isJumpedTo = isJumpedTo;
 
         runtime_address += instruction.info.length;
         section_offset += instruction.info.length;
@@ -861,7 +851,7 @@ void Function::disassemble(const FunctionSetup &setup)
         }
         else
         {
-            asm_instruction.text = instruction_buffer.c_str();
+            asm_instruction.text = instruction_buffer;
 
             const JumpType jump_type = get_jump_type(&instruction.info, &instruction.operands[0]);
 

@@ -42,6 +42,8 @@ struct ProgramComparisonDescriptor
                 bool hasMatchedFunction,
                 std::optional<int8_t> similarity = std::nullopt);
 
+            bool is_valid() const { return !m_label.empty(); }
+
             std::string m_label;
             std::optional<int8_t> m_similarity = std::nullopt;
         };
@@ -145,6 +147,7 @@ struct ProgramComparisonDescriptor
 
         // Functions that are visible and selected in the ui. Links to NamedFunctions.
         std::vector<IndexT> m_selectedNamedFunctionIndices;
+        std::vector<IndexT> m_selectedUnmatchedNamedFunctionIndices;
     };
 
     struct FunctionsSimilarityReport
@@ -152,6 +155,12 @@ struct ProgramComparisonDescriptor
         bool has_result() const { return totalSimilarity.has_value(); }
 
         std::optional<uint32_t> totalSimilarity = std::nullopt; // Accumulative similarity value of matched functions.
+    };
+
+    struct FunctionsPageData
+    {
+        span<const IndexT> matchedFunctionIndices;
+        std::array<span<const IndexT>, 2> namedFunctionIndicesArray;
     };
 
     ProgramComparisonDescriptor();
@@ -178,11 +187,20 @@ struct ProgramComparisonDescriptor
 
     void update_matched_named_function_ui_infos(span<const IndexT> matchedFunctionIndices);
 
+    const File::NamedFunctionUiInfo *get_first_valid_named_function_ui_info(const MatchedFunction &matchedFunction) const;
+
     span<const IndexT> get_matched_named_function_indices_for_processing(IndexT side);
+
+    int get_functions_page_count() const;
+    FunctionsPageData get_selected_functions_page_data() const;
 
     const ProgramComparisonId m_id = InvalidId;
 
     int m_pendingBuildComparisonRecordsCommands = 0;
+
+    // Selected functions in pages.
+    int m_imguiPageSize = 25;
+    int m_imguiSelectedPage = 1; // 1..n
 
     bool m_imguiHasOpenWindow = true;
     bool m_matchedFunctionsBuilt = false;

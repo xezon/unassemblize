@@ -76,12 +76,12 @@ std::string AsmPrinter::to_string(const AsmInstruction &instruction, size_t inde
         append_whitespace_inplace(str, indent_len);
         str.append(instruction.text);
         util::strip_inplace(str, strip_quote);
-    }
 
-    if (instruction.isJump)
-    {
-        // Append jump distance as inline comment.
-        str += fmt::format(" ; {:+d} bytes", instruction.jumpLen);
+        if (instruction.isJump)
+        {
+            // Append jump distance as inline comment.
+            str += fmt::format(" ; {:+d} bytes", instruction.jumpLen);
+        }
     }
 
     return str;
@@ -280,7 +280,6 @@ void AsmPrinter::append_source_code(
         sourceline_len += 1; // +1 for colon.
 
     const size_t count = records.size();
-    uint16_t last_line_number = 0;
 
     for (size_t i = 0; i < count; ++i)
     {
@@ -304,9 +303,8 @@ void AsmPrinter::append_source_code(
                     }
                     line.append(buffers.misc_buf);
 
-                    if (last_line_number != instruction->lineNumber)
+                    if (instruction->isFirstLine)
                     {
-                        last_line_number = instruction->lineNumber;
                         buffers.misc_buf.assign(source_file_text.lines[line_idx]);
                         truncate_inplace(buffers.misc_buf, sourcecode_len);
                         line.append(buffers.misc_buf);

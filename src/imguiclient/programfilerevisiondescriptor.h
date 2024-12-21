@@ -89,7 +89,7 @@ struct ProgramFileRevisionDescriptor
     // Stores named functions that have been prepared for async processing already. Links to NamedFunctions.
     ProcessedState m_processedNamedFunctions;
 
-    FileContentStorage m_fileContentStrorage;
+    FileContentStorage m_fileContentStorage;
 
     bool m_namedFunctionsBuilt = false;
 

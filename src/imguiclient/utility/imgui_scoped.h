@@ -1,18 +1,13 @@
 #pragma once
 
+#include "util/nocopy.h"
 #include <imgui.h>
 
 // clang-format off
 
 namespace ImScoped
 {
-    #define IMGUI_DELETE_MOVE_COPY(Base)                             \
-        Base(Base&&) = delete;                /* Move not allowed */ \
-        Base &operator=(Base&&) = delete;     /* "" */               \
-        Base(const Base&) = delete;           /* Copy not allowed */ \
-        Base& operator=(const Base&) = delete /* "" */
-
-    struct Window
+    struct Window : NoCopyNoMove
     {
         bool IsContentVisible;
 
@@ -20,11 +15,9 @@ namespace ImScoped
         ~Window() { ImGui::End(); }
 
         explicit operator bool() const { return IsContentVisible; }
-
-        IMGUI_DELETE_MOVE_COPY(Window);
     };
 
-    struct Child
+    struct Child : NoCopyNoMove
     {
         bool IsContentVisible;
 
@@ -34,88 +27,68 @@ namespace ImScoped
         ~Child() { ImGui::EndChild(); }
 
         explicit operator bool() const { return IsContentVisible; }
-
-        IMGUI_DELETE_MOVE_COPY(Child);
     };
 
-    struct Font
+    struct Font : NoCopyNoMove
     {
         Font(ImFont* font) { ImGui::PushFont(font); }
         ~Font() { ImGui::PopFont(); }
-
-        IMGUI_DELETE_MOVE_COPY(Font);
     };
 
-    struct StyleColor
+    struct StyleColor : NoCopyNoMove
     {
         StyleColor(ImGuiCol idx, ImU32 col) { ImGui::PushStyleColor(idx, col); }
         StyleColor(ImGuiCol idx, const ImVec4& col) { ImGui::PushStyleColor(idx, col); }
         ~StyleColor() { ImGui::PopStyleColor(); }
-
-        IMGUI_DELETE_MOVE_COPY(StyleColor);
     };
 
-    struct StyleVar
+    struct StyleVar : NoCopyNoMove
     {
         StyleVar(ImGuiStyleVar idx, float val) { ImGui::PushStyleVar(idx, val); }
         StyleVar(ImGuiStyleVar idx, const ImVec2& val) { ImGui::PushStyleVar(idx, val); }
         ~StyleVar() { ImGui::PopStyleVar(); }
-
-        IMGUI_DELETE_MOVE_COPY(StyleVar);
     };
 
-    struct ItemWidth
+    struct ItemWidth : NoCopyNoMove
     {
         ItemWidth(float item_width) { ImGui::PushItemWidth(item_width); }
         ~ItemWidth() { ImGui::PopItemWidth(); }
-
-        IMGUI_DELETE_MOVE_COPY(ItemWidth);
     };
 
-    struct TextWrapPos
+    struct TextWrapPos : NoCopyNoMove
     {
         TextWrapPos(float wrap_pos_x = 0.0f) { ImGui::PushTextWrapPos(wrap_pos_x); }
         ~TextWrapPos() { ImGui::PopTextWrapPos(); }
-
-        IMGUI_DELETE_MOVE_COPY(TextWrapPos);
     };
 
-    struct AllowKeyboardFocus
+    struct AllowKeyboardFocus : NoCopyNoMove
     {
         AllowKeyboardFocus(bool tab_stop) { ImGui::PushAllowKeyboardFocus(tab_stop); }
         ~AllowKeyboardFocus() { ImGui::PopAllowKeyboardFocus(); }
-
-        IMGUI_DELETE_MOVE_COPY(AllowKeyboardFocus);
     };
 
-    struct ButtonRepeat
+    struct ButtonRepeat : NoCopyNoMove
     {
         ButtonRepeat(bool repeat) { ImGui::PushButtonRepeat(repeat); }
         ~ButtonRepeat() { ImGui::PopButtonRepeat(); }
-
-        IMGUI_DELETE_MOVE_COPY(ButtonRepeat);
     };
 
-    struct Group
+    struct Group : NoCopyNoMove
     {
         Group() { ImGui::BeginGroup(); }
         ~Group() { ImGui::EndGroup(); }
-
-        IMGUI_DELETE_MOVE_COPY(Group);
     };
 
-    struct ID
+    struct ID : NoCopyNoMove
     {
         ID(const char* str_id) { ImGui::PushID(str_id); }
         ID(const char* str_id_begin, const char* str_id_end) { ImGui::PushID(str_id_begin, str_id_end); }
         ID(const void* ptr_id) { ImGui::PushID(ptr_id); }
         ID(int int_id) { ImGui::PushID(int_id); }
         ~ID() { ImGui::PopID(); }
-
-        IMGUI_DELETE_MOVE_COPY(ID);
     };
 
-    struct Combo
+    struct Combo : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -123,11 +96,9 @@ namespace ImScoped
         ~Combo() { if (IsOpen) ImGui::EndCombo(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(Combo);
     };
 
-    struct TreeNode
+    struct TreeNode : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -137,11 +108,9 @@ namespace ImScoped
         ~TreeNode() { if (IsOpen) ImGui::TreePop(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(TreeNode);
     };
 
-    struct TreeNodeV
+    struct TreeNodeV : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -150,11 +119,9 @@ namespace ImScoped
         ~TreeNodeV() { if (IsOpen) ImGui::TreePop(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(TreeNodeV);
     };
 
-    struct TreeNodeEx
+    struct TreeNodeEx : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -164,11 +131,9 @@ namespace ImScoped
         ~TreeNodeEx() { if (IsOpen) ImGui::TreePop(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(TreeNodeEx);
     };
 
-    struct TreeNodeExV
+    struct TreeNodeExV : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -177,11 +142,9 @@ namespace ImScoped
         ~TreeNodeExV() { if (IsOpen) ImGui::TreePop(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(TreeNodeExV);
     };
 
-    struct MainMenuBar
+    struct MainMenuBar : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -189,11 +152,9 @@ namespace ImScoped
         ~MainMenuBar() { if (IsOpen) ImGui::EndMainMenuBar(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(MainMenuBar);
     };
 
-    struct MenuBar
+    struct MenuBar : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -201,11 +162,9 @@ namespace ImScoped
         ~MenuBar() { if (IsOpen) ImGui::EndMenuBar(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(MenuBar);
     };
 
-    struct Menu
+    struct Menu : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -213,19 +172,15 @@ namespace ImScoped
         ~Menu() { if (IsOpen) ImGui::EndMenu(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(Menu);
     };
 
-    struct Tooltip
+    struct Tooltip : NoCopyNoMove
     {
         Tooltip() { ImGui::BeginTooltip(); }
         ~Tooltip() { ImGui::EndTooltip(); }
-
-        IMGUI_DELETE_MOVE_COPY(Tooltip);
     };
 
-    struct Popup
+    struct Popup : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -233,11 +188,9 @@ namespace ImScoped
         ~Popup() { if (IsOpen) ImGui::EndPopup(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(Popup);
     };
 
-    struct PopupContextItem
+    struct PopupContextItem : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -245,11 +198,9 @@ namespace ImScoped
         ~PopupContextItem() { if (IsOpen) ImGui::EndPopup(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(PopupContextItem);
     };
 
-    struct PopupContextWindow
+    struct PopupContextWindow : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -257,11 +208,9 @@ namespace ImScoped
         ~PopupContextWindow() { if (IsOpen) ImGui::EndPopup(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(PopupContextWindow);
     };
 
-    struct PopupContextVoid
+    struct PopupContextVoid : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -269,11 +218,9 @@ namespace ImScoped
         ~PopupContextVoid() { if (IsOpen) ImGui::EndPopup(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(PopupContextVoid);
     };
 
-    struct PopupModal
+    struct PopupModal : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -281,11 +228,9 @@ namespace ImScoped
         ~PopupModal() { if (IsOpen) ImGui::EndPopup(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(PopupModal);
     };
 
-    struct DragDropSource
+    struct DragDropSource : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -293,11 +238,9 @@ namespace ImScoped
         ~DragDropSource() { if (IsOpen) ImGui::EndDragDropSource(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(DragDropSource);
     };
 
-    struct DragDropTarget
+    struct DragDropTarget : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -305,21 +248,17 @@ namespace ImScoped
         ~DragDropTarget() { if (IsOpen) ImGui::EndDragDropTarget(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(DragDropTarget);
     };
 
-    struct ClipRect
+    struct ClipRect : NoCopyNoMove
     {
         ClipRect(const ImVec2& clip_rect_min, const ImVec2& clip_rect_max, bool intersect_with_current_clip_rect) { ImGui::PushClipRect(clip_rect_min, clip_rect_max, intersect_with_current_clip_rect); }
         ~ClipRect() { ImGui::PopClipRect(); }
-
-        IMGUI_DELETE_MOVE_COPY(ClipRect);
     };
 
     
 #if 0 // DEPRECATED in 1.90.0 (from September 2023)
-    struct ChildFrame
+    struct ChildFrame : NoCopyNoMove
     {
         bool IsOpen;
 
@@ -327,20 +266,16 @@ namespace ImScoped
         ~ChildFrame() { ImGui::EndChildFrame(); }
 
         explicit operator bool() const { return IsOpen; }
-
-        IMGUI_DELETE_MOVE_COPY(ChildFrame);
     };
 #endif
 
-    struct Disabled
+    struct Disabled : NoCopyNoMove
     {
         Disabled(bool disabled) { ImGui::BeginDisabled(disabled); }
         ~Disabled() { ImGui::EndDisabled(); }
-
-        IMGUI_DELETE_MOVE_COPY(Disabled);
     };
 
-    struct ListBox
+    struct ListBox : NoCopyNoMove
     {
         bool IsContentVisible;
 
@@ -348,11 +283,9 @@ namespace ImScoped
         ~ListBox() { if (IsContentVisible) ImGui::EndListBox(); }
 
         explicit operator bool() const { return IsContentVisible; }
-
-        IMGUI_DELETE_MOVE_COPY(ListBox);
     };
 
-    struct Table
+    struct Table : NoCopyNoMove
     {
         bool IsContentVisible;
 
@@ -363,12 +296,7 @@ namespace ImScoped
         ~Table() { if (IsContentVisible) ImGui::EndTable(); }
 
         explicit operator bool() const { return IsContentVisible; }
-
-        IMGUI_DELETE_MOVE_COPY(Table);
     };
-
-    #undef IMGUI_DELETE_MOVE_COPY
-
 } // namespace ImScoped
 
 // clang-format on
