@@ -21,7 +21,7 @@ class FileContentStorage;
 
 struct LoadExeOptions
 {
-    LoadExeOptions(const std::string &input_file) : input_file(input_file) {}
+    LoadExeOptions(std::string_view input_file) : input_file(input_file) {}
 
     const std::string input_file;
     std::string config_file;
@@ -31,7 +31,7 @@ struct LoadExeOptions
 
 struct SaveExeConfigOptions
 {
-    SaveExeConfigOptions(const Executable &executable, const std::string &config_file) :
+    SaveExeConfigOptions(const Executable &executable, std::string_view config_file) :
         executable(executable), config_file(config_file)
     {
     }
@@ -42,7 +42,7 @@ struct SaveExeConfigOptions
 
 struct LoadPdbOptions
 {
-    LoadPdbOptions(const std::string &input_file) : input_file(input_file) {}
+    LoadPdbOptions(std::string_view input_file) : input_file(input_file) {}
 
     const std::string input_file;
     bool verbose = false;
@@ -50,7 +50,7 @@ struct LoadPdbOptions
 
 struct SavePdbConfigOptions
 {
-    SavePdbConfigOptions(const PdbReader &pdb_reader, const std::string &config_file) :
+    SavePdbConfigOptions(const PdbReader &pdb_reader, std::string_view config_file) :
         pdb_reader(pdb_reader), config_file(config_file)
     {
     }
@@ -62,7 +62,7 @@ struct SavePdbConfigOptions
 
 struct AsmOutputOptions
 {
-    AsmOutputOptions(const Executable &executable, const std::string &output_file, uint64_t start_addr, uint64_t end_addr) :
+    AsmOutputOptions(const Executable &executable, std::string_view output_file, uint64_t start_addr, uint64_t end_addr) :
         executable(executable), output_file(output_file), start_addr(start_addr), end_addr(end_addr)
     {
     }
@@ -80,7 +80,7 @@ struct AsmComparisonOptions
     AsmComparisonOptions(
         ConstExecutablePair executable_pair,
         ConstPdbReaderPair pdb_reader_pair,
-        const std::string &output_file) :
+        std::string_view output_file) :
         executable_pair(executable_pair), pdb_reader_pair(pdb_reader_pair), output_file(output_file)
     {
     }

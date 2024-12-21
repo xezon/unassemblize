@@ -29,7 +29,7 @@ enum class ExeSectionType
     Unknown,
 };
 
-ExeSectionType to_section_type(const char *str);
+ExeSectionType to_section_type(std::string_view str);
 const char *to_string(ExeSectionType type);
 
 struct ExeSectionInfo

@@ -72,7 +72,7 @@ struct AsmInstructionPair
 using AsmComparisonRecord = std::variant<AsmLabelPair, AsmInstructionPair>;
 using AsmComparisonRecords = std::vector<AsmComparisonRecord>;
 
-AsmMatchStrictness to_asm_match_strictness(const char *str);
+AsmMatchStrictness to_asm_match_strictness(std::string_view str);
 
 struct AsmComparisonResult
 {
@@ -174,7 +174,7 @@ enum class MatchBundleType
     Count
 };
 
-MatchBundleType to_match_bundle_type(const char *str);
+MatchBundleType to_match_bundle_type(std::string_view str);
 
 struct StringPair
 {

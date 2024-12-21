@@ -37,7 +37,7 @@ enum class AsmFormat
     DEFAULT,
 };
 
-AsmFormat to_asm_format(const char *str);
+AsmFormat to_asm_format(std::string_view str);
 
 /*
  * Intermediate instruction data between Zydis disassemble and final text generation.

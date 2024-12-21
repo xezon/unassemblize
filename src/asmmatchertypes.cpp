@@ -62,7 +62,7 @@ bool AsmMismatchInfo::is_maybe_mismatch() const
     return is_maybe_match();
 }
 
-AsmMatchStrictness to_asm_match_strictness(const char *str)
+AsmMatchStrictness to_asm_match_strictness(std::string_view str)
 {
     if (util::equals_nocase(str, "lenient"))
     {
@@ -78,7 +78,7 @@ AsmMatchStrictness to_asm_match_strictness(const char *str)
     }
     else
     {
-        printf("Unrecognized asm match to_asm_match_strictness '%s'. Defaulting to 'Undecided'", str);
+        printf("Unrecognized asm match to_asm_match_strictness '%.*s'. Defaulting to 'Undecided'", PRINTF_STRING(str));
         return AsmMatchStrictness::Undecided;
     }
 }
@@ -189,7 +189,7 @@ bool MatchedFunction::is_compared() const
     return !comparison.records.empty();
 }
 
-MatchBundleType to_match_bundle_type(const char *str)
+MatchBundleType to_match_bundle_type(std::string_view str)
 {
     if (util::equals_nocase(str, "compiland"))
     {
@@ -205,7 +205,7 @@ MatchBundleType to_match_bundle_type(const char *str)
     }
     else
     {
-        printf("Unrecognized match bundle type '%s'. Defaulting to 'None'", str);
+        printf("Unrecognized match bundle type '%.*s'. Defaulting to 'None'", PRINTF_STRING(str));
         return MatchBundleType::None;
     }
     static_assert(size_t(MatchBundleType::Count) == 3, "Enum was changed. Update conditions.");

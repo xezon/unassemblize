@@ -223,8 +223,12 @@ private:
     void ComparisonManagerFunctionsLists(ProgramComparisonDescriptor &descriptor);
     void ComparisonManagerFunctionsList(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
 
-    static void ComparisonManagerFunctionEntries(const ProgramComparisonDescriptor &descriptor);
+    static void ComparisonManagerFunctionEntries(ProgramComparisonDescriptor &descriptor);
+    static void ComparisonManagerFunctionEntriesControls(ProgramComparisonDescriptor &descriptor);
 
+    static void ComparisonManagerMatchedFunctions(
+        const ProgramComparisonDescriptor &descriptor,
+        span<const IndexT> matchedFunctionIndices);
     static void ComparisonManagerMatchedFunction(
         const ProgramComparisonDescriptor &descriptor,
         const MatchedFunction &matchedFunction);
@@ -234,7 +238,11 @@ private:
         const ProgramFileRevisionDescriptor &fileRevision,
         const NamedFunction &namedFunction);
 
-    static void ComparisonManagerNamedFunctionEntry(
+    static void ComparisonManagerNamedFunctions(
+        const ProgramComparisonDescriptor &descriptor,
+        IndexT sideIdx,
+        span<const IndexT> namedFunctionIndices);
+    static void ComparisonManagerNamedFunction(
         IndexT sideIdx,
         const ProgramFileRevisionDescriptor &fileRevision,
         const NamedFunction &namedFunction);

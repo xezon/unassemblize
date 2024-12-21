@@ -18,36 +18,24 @@
 
 namespace util
 {
-std::string to_utf8(const wchar_t *utf16)
+std::string to_utf8(std::wstring_view utf16)
 {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-    return convert.to_bytes(utf16);
+    return convert.to_bytes(utf16.data(), utf16.data() + utf16.size());
 }
 
-std::string to_utf8(const std::wstring &utf16)
+std::wstring to_utf16(std::string_view utf8)
 {
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-    return convert.to_bytes(utf16);
+    return convert.from_bytes(utf8.data(), utf8.data() + utf8.size());
 }
 
-std::wstring to_utf16(const char *utf8)
-{
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-    return convert.from_bytes(utf8);
-}
-
-std::wstring to_utf16(const std::string &utf8)
-{
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> convert;
-    return convert.from_bytes(utf8);
-}
-
-std::string get_file_ext(const std::string &file_name)
+std::string get_file_ext(std::string_view file_name)
 {
     const size_t pos = file_name.find_last_of(".");
-    if (pos != std::string::npos)
+    if (pos != std::string_view::npos)
     {
-        return file_name.substr(pos + 1);
+        return std::string(file_name.substr(pos + 1));
     }
     return {};
 }
@@ -70,7 +58,7 @@ std::string to_hex_string(const std::vector<uint8_t> &data)
     return str;
 }
 
-std::string abs_path(const std::string &path)
+std::string abs_path(std::string_view path)
 {
     return std::filesystem::absolute(path).string();
 }

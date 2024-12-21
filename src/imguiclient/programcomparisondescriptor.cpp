@@ -277,6 +277,7 @@ void ProgramComparisonDescriptor::File::on_bundles_interaction()
 
     update_selected_bundles();
     update_active_functions();
+    // Perhaps the ui infos should be build once earlier and not on every bundle interaction?
     update_named_function_ui_infos(get_active_named_function_indices());
 }
 
@@ -420,9 +421,11 @@ void ProgramComparisonDescriptor::File::update_selected_named_functions()
     assert(named_functions_built());
 
     std::vector<IndexT> selectedAllNamedFunctionIndices;
+    std::vector<IndexT> selectedUnmatchedNamedFunctionIndices;
 
     // Reservation size typically matches selection size, but could be larger.
     selectedAllNamedFunctionIndices.reserve(m_imguiFunctionsSelection.Size);
+    selectedUnmatchedNamedFunctionIndices.reserve(m_imguiFunctionsSelection.Size);
 
     // Uses lookup set. Is much faster than linear search over elements.
     const std::unordered_set<IndexT> filteredSet(
@@ -437,9 +440,16 @@ void ProgramComparisonDescriptor::File::update_selected_named_functions()
             continue;
 
         selectedAllNamedFunctionIndices.push_back(IndexT(id));
+
+        if (!is_matched_function(IndexT(id)))
+        {
+            selectedUnmatchedNamedFunctionIndices.push_back(IndexT(id));
+        }
     }
 
     m_selectedNamedFunctionIndices = std::move(selectedAllNamedFunctionIndices);
+    m_selectedUnmatchedNamedFunctionIndices = std::move(selectedUnmatchedNamedFunctionIndices);
+    m_selectedUnmatchedNamedFunctionIndices.shrink_to_fit();
 }
 
 void ProgramComparisonDescriptor::prepare_rebuild()
@@ -670,6 +680,20 @@ void ProgramComparisonDescriptor::update_matched_named_function_ui_infos(span<co
     }
 }
 
+const ProgramComparisonDescriptor::File::NamedFunctionUiInfo *ProgramComparisonDescriptor::
+    get_first_valid_named_function_ui_info(const MatchedFunction &matchedFunction) const
+{
+    for (IndexT i = 0; i < 2; ++i)
+    {
+        const IndexT namedFunctionIndex = matchedFunction.named_idx_pair[i];
+        const File::NamedFunctionUiInfos &uiInfos = m_files[i].m_namedFunctionUiInfos;
+        const File::NamedFunctionUiInfo &uiInfo = uiInfos[namedFunctionIndex];
+        if (uiInfo.is_valid())
+            return &uiInfo;
+    }
+    return nullptr;
+}
+
 span<const IndexT> ProgramComparisonDescriptor::get_matched_named_function_indices_for_processing(IndexT side)
 {
     const std::vector<IndexT> matchedNamedFunctionIndices =
@@ -677,6 +701,138 @@ span<const IndexT> ProgramComparisonDescriptor::get_matched_named_function_indic
 
     return m_files[side].m_revisionDescriptor->m_processedNamedFunctions.get_items_for_processing(
         span<const IndexT>{matchedNamedFunctionIndices});
+}
+
+int ProgramComparisonDescriptor::get_functions_page_count() const
+{
+    assert(m_imguiPageSize > 0);
+    size_t size = m_selectedMatchedFunctionIndices.size();
+    for (IndexT i = 0; i < 2; ++i)
+    {
+        size += m_files[i].m_selectedUnmatchedNamedFunctionIndices.size();
+    }
+
+    const size_t remainder = size % m_imguiPageSize;
+    size /= m_imguiPageSize;
+    if (remainder != 0)
+        size += 1;
+
+    return size;
+}
+
+namespace
+{
+struct FunctionsSubPageData
+{
+    span<const IndexT> items;
+
+    // Current page index position.
+    int leftOverPageIndex = 0;
+
+    // Page item count remainder at current page index position. Needs to be 0 before page index can advance.
+    int leftOverPageIndexRemainder = 0;
+
+    // Current maximum page item count.
+    int leftOverPageSize = 0;
+};
+
+FunctionsSubPageData get_functions_sub_page_data(
+    int pageIndex,
+    int pageIndexRemainder,
+    int pageSize,
+    span<const IndexT> items)
+{
+    FunctionsSubPageData data;
+
+    if (pageIndexRemainder > 0)
+    {
+        // Process remainder. Turn the page if all remainders can be filled.
+        const int availableRemainder = std::min<int>(pageIndexRemainder, items.size());
+        data.leftOverPageIndexRemainder = pageIndexRemainder - availableRemainder;
+        if (data.leftOverPageIndexRemainder > 0)
+        {
+            // Not all remainders were filled. Page is incomplete.
+            data.leftOverPageIndex = pageIndex;
+            data.leftOverPageSize = pageSize;
+            return data;
+        }
+        // Next page has been reached. Skip items accordingly.
+        items = {items.data() + availableRemainder, items.size() - availableRemainder};
+        if (pageIndex > 0)
+        {
+            // Skip page index because items towards the new page were skipped as well.
+            --pageIndex;
+        }
+        else
+        {
+            // The last page is an exception. Cannot skip.
+        }
+    }
+
+    if (pageIndex == 0)
+    {
+        if (pageSize > 0)
+        {
+            // Fill last page with remaining items.
+            const int availableItemSize = std::min<int>(pageSize, items.size());
+            data.items = {items.data(), items.data() + availableItemSize};
+            data.leftOverPageSize = pageSize - availableItemSize;
+        }
+        else
+        {
+            // Nothing left to do. Page has been filled.
+        }
+    }
+    else
+    {
+        assert(pageIndex > 0);
+        const int itemIndex = pageIndex * pageSize;
+        if (itemIndex < items.size())
+        {
+            // Items are contained in page.
+            const int availableItemSize = items.size() - itemIndex;
+            const int usableItemSize = std::min<int>(availableItemSize, pageSize);
+            data.items = {items.data() + itemIndex, items.data() + itemIndex + usableItemSize};
+            data.leftOverPageSize = pageSize - usableItemSize;
+        }
+        else
+        {
+            // Items are not contained in page.
+            data.leftOverPageIndex = pageIndex - (items.size() / pageSize);
+            data.leftOverPageSize = pageSize;
+        }
+
+        const int remainder = items.size() % pageSize;
+        if (remainder > 0)
+        {
+            // Set remainder if so required. It would be ok to set the remainder always,
+            // but all that would do is run through the remainder processing logic once.
+            data.leftOverPageIndexRemainder = pageSize - remainder;
+        }
+    }
+    return data;
+}
+} // namespace
+
+ProgramComparisonDescriptor::FunctionsPageData ProgramComparisonDescriptor::get_selected_functions_page_data() const
+{
+    assert(m_imguiSelectedPage > 0);
+    const int pageIndex = m_imguiSelectedPage - 1;
+    FunctionsPageData pageData;
+    // Page data is collected from multiple sources.
+    FunctionsSubPageData subPageData;
+    subPageData = get_functions_sub_page_data(pageIndex, 0, m_imguiPageSize, m_selectedMatchedFunctionIndices);
+    pageData.matchedFunctionIndices = subPageData.items;
+    for (IndexT i = 0; i < 2; ++i)
+    {
+        subPageData = get_functions_sub_page_data(
+            subPageData.leftOverPageIndex,
+            subPageData.leftOverPageIndexRemainder,
+            subPageData.leftOverPageSize,
+            m_files[i].m_selectedUnmatchedNamedFunctionIndices);
+        pageData.namedFunctionIndicesArray[i] = subPageData.items;
+    }
+    return pageData;
 }
 
 std::vector<IndexT> ProgramComparisonDescriptor::build_named_function_indices(
@@ -692,4 +848,5 @@ std::vector<IndexT> ProgramComparisonDescriptor::build_named_function_indices(
     }
     return namedFunctionIndices;
 }
+
 } // namespace unassemblize::gui

@@ -17,15 +17,15 @@
 #include <string_view>
 #include <vector>
 
+#define PRINTF_STRING(str) static_cast<int>(str.size()), str.data()
+
 namespace util
 {
-std::string to_utf8(const wchar_t *utf16);
-std::string to_utf8(const std::wstring &utf16);
-std::wstring to_utf16(const char *utf8);
-std::wstring to_utf16(const std::string &utf8);
-std::string get_file_ext(const std::string &file_name);
+std::string to_utf8(std::wstring_view utf16);
+std::wstring to_utf16(std::string_view utf8);
+std::string get_file_ext(std::string_view file_name);
 std::string to_hex_string(const std::vector<uint8_t> &data);
-std::string abs_path(const std::string &path);
+std::string abs_path(std::string_view path);
 
 // Efficiently strip characters in place.
 template<typename String>
@@ -88,24 +88,73 @@ constexpr int compare_nocase(std::string_view str1, std::string_view str2)
 }
 
 // Efficiently assign format to std like string.
+// The output string will always fit the formatted string in its entirety.
 template<typename String, typename... Args>
-void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
+void assign_format(String &output, fmt::format_string<Args...> format, Args &&... args)
 {
-    output.resize(max_size);
-    const auto result = fmt::format_to_n(output.begin(), max_size, format, std::forward<Args>(args)...);
-    assert(result.size <= output.size());
-    output.resize(result.size);
+    const size_t initial_capacity = output.capacity();
+    output.resize(initial_capacity); // Does not allocate.
+    auto result = fmt::format_to_n(output.begin(), initial_capacity, format, std::forward<Args>(args)...);
+    output.resize(result.size); // May allocate if required size is larger than output string capacity.
+    if (result.size > initial_capacity)
+    {
+        // Output buffer was not large enough. Repeat on the resized string.
+        result = fmt::format_to_n(output.begin(), output.size(), format, std::forward<Args>(args)...);
+        assert(result.size == output.size());
+    }
 }
 
 // Efficiently append format to std like string.
+// The output string will always fit the formatted string in its entirety.
+template<typename String, typename... Args>
+void append_format(String &output, fmt::format_string<Args...> format, Args &&... args)
+{
+    const size_t initial_size = output.size();
+    const size_t initial_capacity = output.capacity();
+    output.resize(initial_capacity); // Does not allocate.
+    auto result = fmt::format_to_n(
+        output.begin() + initial_size,
+        initial_capacity - initial_size,
+        format,
+        std::forward<Args>(args)...);
+    const size_t expected_size = initial_size + result.size;
+    output.resize(expected_size); // May allocate if required size is larger than output string capacity.
+    if (expected_size > initial_capacity)
+    {
+        // Output buffer was not large enough. Repeat on the resized string.
+        result = fmt::format_to_n(
+            output.begin() + initial_size,
+            output.size() - initial_size,
+            format,
+            std::forward<Args>(args)...);
+        assert(initial_size + result.size == output.size());
+    }
+}
+
+// Efficiently assign format to std like string.
+// The output string is truncated if the formatted string exceeds the maximum size.
+template<typename String, typename... Args>
+void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
+{
+    output.resize(max_size); // May allocate if required size is larger than output string capacity.
+    const auto result = fmt::format_to_n(output.begin(), max_size, format, std::forward<Args>(args)...);
+    const size_t written = std::distance(output.begin(), result.out);
+    assert(written <= output.size());
+    output.resize(written); // Does not allocate.
+}
+
+// Efficiently append format to std like string.
+// The output string is truncated if the previous string plus the appended formatted string exceeds the maximum size.
 template<typename String, typename... Args>
 void append_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
 {
-    size_t start_pos = output.size();
-    output.resize(start_pos + max_size);
-    const auto result = fmt::format_to_n(output.begin() + start_pos, max_size, format, std::forward<Args>(args)...);
-    assert(start_pos + result.size <= output.size());
-    output.resize(start_pos + result.size);
+    const size_t initial_size = output.size();
+    output.resize(max_size); // May allocate if required size is larger than output string capacity.
+    typename String::iterator begin = output.begin() + initial_size;
+    const auto result = fmt::format_to_n(begin, max_size - initial_size, format, std::forward<Args>(args)...);
+    const size_t written = std::distance(begin, result.out);
+    assert(written <= output.size());
+    output.resize(initial_size + written); // Does not allocate.
 }
 
 // Efficiently clears a container by swapping with an empty container.

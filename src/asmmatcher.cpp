@@ -337,7 +337,7 @@ bool AsmMatcher::has_jump_len_mismatch(const AsmInstruction &instruction0, const
     return instruction0.isJump && instruction1.isJump && instruction0.jumpLen != instruction1.jumpLen;
 }
 
-AsmMismatchInfo AsmMatcher::compare_asm_text(const std::string &text0, const std::string &text1)
+AsmMismatchInfo AsmMatcher::compare_asm_text(std::string_view text0, std::string_view text1)
 {
     const InstructionTextArray array0 = split_instruction_text(text0);
     const InstructionTextArray array1 = split_instruction_text(text1);
@@ -498,14 +498,15 @@ AsmMatcher::InstructionTextArrays AsmMatcher::split_instruction_texts(const AsmI
     return arrays;
 }
 
-AsmMatcher::InstructionTextArray AsmMatcher::split_instruction_text(const std::string &text)
+AsmMatcher::InstructionTextArray AsmMatcher::split_instruction_text(std::string_view text)
 {
     InstructionTextArray arr;
     size_t index = 0;
     char sep = ' ';
     bool in_quote = false;
+    const char *end = text.data() + text.size();
 
-    for (const char *c = text.c_str(); *c != '\0'; ++c)
+    for (const char *c = text.data(); c != end; ++c)
     {
         if (*c == '\"')
         {
