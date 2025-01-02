@@ -65,8 +65,6 @@ bool Executable::load(const std::string &exe_filename)
             ExeSectionInfo &section = m_sections.back();
 
             section.name = it->name();
-            m_symbolNameToIndexMap[section.name] = section_idx;
-
             section.data = it->content().data();
 
             // For PE format virtual_address appears to be an offset, in ELF/Mach-O it appears to be absolute.
@@ -79,7 +77,7 @@ bool Executable::load(const std::string &exe_filename)
 
             // Naive split on whether section contains data or code... have entrypoint? Code, else data.
             // Needs to be refined by providing a config file with section types specified.
-            const uint64_t entrypoint = m_binary->entrypoint() - m_binary->imagebase();
+            const Address64T entrypoint = m_binary->entrypoint() - m_binary->imagebase();
             if (section.address < entrypoint && section.address + section.size >= entrypoint)
             {
                 section.type = ExeSectionType::Code;
@@ -150,15 +148,14 @@ bool Executable::load(const std::string &exe_filename)
 
 void Executable::unload()
 {
-    m_exeFilename.clear();
+    util::free_container(m_exeFilename);
     m_binary.reset();
-    m_sections.clear();
-    m_sectionNameToIndexMap.clear();
+    util::free_container(m_sections);
     m_codeSectionIdx = ~IndexT(0);
-    m_symbols.clear();
-    m_symbolAddressToIndexMap.clear();
-    m_symbolNameToIndexMap.clear();
-    m_targetObjects.clear();
+    util::free_container(m_symbols);
+    util::free_container(m_symbolAddressToIndexMap);
+    util::free_container(m_symbolNameToIndexMap);
+    util::free_container(m_targetObjects);
     m_imageData = ExeImageData();
 }
 
@@ -177,25 +174,32 @@ const ExeSections &Executable::get_sections() const
     return m_sections;
 }
 
-const ExeSectionInfo *Executable::find_section(uint64_t address) const
+const ExeSectionInfo *Executable::find_section(Address64T address) const
 {
     for (const ExeSectionInfo &section : m_sections)
     {
         if (address >= section.address && address < section.address + section.size)
-        {
             return &section;
-        }
     }
     return nullptr;
 }
 
 const ExeSectionInfo *Executable::find_section(const std::string &name) const
 {
-    StringToIndexMap::const_iterator it = m_sectionNameToIndexMap.find(name);
-
-    if (it != m_sectionNameToIndexMap.end())
+    for (const ExeSectionInfo &section : m_sections)
     {
-        return &m_sections[it->second];
+        if (section.name == name)
+            return &section;
+    }
+    return nullptr;
+}
+
+ExeSectionInfo *Executable::find_section(const std::string &name)
+{
+    for (ExeSectionInfo &section : m_sections)
+    {
+        if (section.name == name)
+            return &section;
     }
     return nullptr;
 }
@@ -209,38 +213,43 @@ const ExeSectionInfo *Executable::get_code_section() const
     return nullptr;
 }
 
-uint64_t Executable::image_base() const
+Address64T Executable::image_base() const
 {
     return m_imageData.imageBase;
 }
 
-uint64_t Executable::code_section_begin_from_image_base() const
+Address64T Executable::code_section_begin_from_image_base() const
 {
     const ExeSectionInfo *section = get_code_section();
     assert(section != nullptr);
     return section->address + m_imageData.imageBase;
 }
 
-uint64_t Executable::code_section_end_from_image_base() const
+Address64T Executable::code_section_end_from_image_base() const
 {
     const ExeSectionInfo *section = get_code_section();
     assert(section != nullptr);
     return section->address + section->size + m_imageData.imageBase;
 }
 
-uint64_t Executable::all_sections_begin_from_image_base() const
+Address64T Executable::all_sections_begin_from_image_base() const
 {
     return m_imageData.sectionsBegin + m_imageData.imageBase;
 }
 
-uint64_t Executable::all_sections_end_from_image_base() const
+Address64T Executable::all_sections_end_from_image_base() const
 {
     return m_imageData.sectionsEnd + m_imageData.imageBase;
 }
 
-const ExeSymbol *Executable::get_symbol(uint64_t address) const
+const ExeSymbols &Executable::get_symbols() const
 {
-    Address64ToIndexMap::const_iterator it = m_symbolAddressToIndexMap.find(address);
+    return m_symbols;
+}
+
+const ExeSymbol *Executable::get_symbol(Address64T address) const
+{
+    Address64ToIndexMapT::const_iterator it = m_symbolAddressToIndexMap.find(address);
 
     if (it != m_symbolAddressToIndexMap.end())
     {
@@ -251,43 +260,20 @@ const ExeSymbol *Executable::get_symbol(uint64_t address) const
 
 const ExeSymbol *Executable::get_symbol(const std::string &name) const
 {
-    StringToIndexMap::const_iterator it = m_symbolNameToIndexMap.find(name);
+    auto pair = m_symbolNameToIndexMap.equal_range(name);
 
-    if (it != m_symbolNameToIndexMap.end())
+    if (std::distance(pair.first, pair.second) == 1)
     {
-        return &m_symbols[it->second];
+        // No symbol or multiple symbols with this name. Skip.
+        return nullptr;
     }
-    return nullptr;
+
+    return &m_symbols[pair.first->second];
 }
 
-const ExeSymbol *Executable::get_symbol_from_image_base(uint64_t address) const
+const ExeSymbol *Executable::get_symbol_from_image_base(Address64T address) const
 {
     return get_symbol(address - image_base());
-}
-
-const ExeSymbol *Executable::get_nearest_symbol(uint64_t address) const
-{
-    Address64ToIndexMap::const_iterator it = m_symbolAddressToIndexMap.lower_bound(address);
-
-    if (it != m_symbolAddressToIndexMap.end())
-    {
-        const ExeSymbol &symbol = m_symbols[it->second];
-        if (symbol.address == address)
-        {
-            return &symbol;
-        }
-        else
-        {
-            const ExeSymbol &prevSymbol = m_symbols[std::prev(it)->second];
-            return &prevSymbol;
-        }
-    }
-    return nullptr;
-}
-
-const ExeSymbols &Executable::get_symbols() const
-{
-    return m_symbols;
 }
 
 void Executable::add_symbols(const ExeSymbols &symbols, bool overwrite)
@@ -318,14 +304,18 @@ void Executable::add_symbols(const PdbSymbolInfoVector &symbols, bool overwrite)
 
 void Executable::add_symbol(const ExeSymbol &symbol, bool overwrite)
 {
-    Address64ToIndexMap::iterator it = m_symbolAddressToIndexMap.find(symbol.address);
+    if (symbol.address == 0)
+        return;
+
+    Address64ToIndexMapT::iterator it = m_symbolAddressToIndexMap.find(symbol.address);
 
     if (it == m_symbolAddressToIndexMap.end())
     {
-        const uint32_t index = static_cast<uint32_t>(m_symbols.size());
+        const IndexT index = static_cast<IndexT>(m_symbols.size());
         m_symbols.push_back(symbol);
-        m_symbolAddressToIndexMap[symbol.address] = index;
-        m_symbolNameToIndexMap[symbol.name] = index;
+        [[maybe_unused]] auto [_, added] = m_symbolAddressToIndexMap.try_emplace(symbol.address, index);
+        assert(added);
+        m_symbolNameToIndexMap.emplace(symbol.name, index);
     }
     else if (overwrite)
     {
@@ -493,9 +483,9 @@ void Executable::load_sections(nlohmann::json &js)
         // Don't try and load an empty section.
         if (!name.empty())
         {
-            StringToIndexMap::const_iterator itSection = m_sectionNameToIndexMap.find(name);
+            ExeSectionInfo *section = find_section(name);
 
-            if (itSection == m_sectionNameToIndexMap.end())
+            if (section == nullptr)
             {
                 if (m_verbose)
                 {
@@ -505,14 +495,12 @@ void Executable::load_sections(nlohmann::json &js)
                 continue;
             }
 
-            ExeSectionInfo &section = m_sections[itSection->second];
-
             std::string type;
             it->at("type").get_to(type);
 
-            section.type = to_section_type(type.c_str());
+            section->type = to_section_type(type.c_str());
 
-            if (section.type == ExeSectionType::Unknown && m_verbose)
+            if (section->type == ExeSectionType::Unknown && m_verbose)
             {
                 printf("Incorrect type specified for section '%s'.\n", name.c_str());
             }
@@ -520,12 +508,12 @@ void Executable::load_sections(nlohmann::json &js)
             auto it_address = it->find("address");
             if (it_address != it->end())
             {
-                it_address->get_to(section.address);
+                it_address->get_to(section->address);
             }
             auto it_size = it->find("size");
             if (it_size != it->end())
             {
-                it_size->get_to(section.size);
+                it_size->get_to(section->size);
             }
         }
     }

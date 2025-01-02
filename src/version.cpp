@@ -30,5 +30,8 @@ std::string create_version_string()
     }
 
     return fmt::format(
-        "unassemblize {:s}{:s}{:s} by The Assembly Armada", revision, GitUncommittedChanges ? "~" : "", version);
+        "unassemblize {:s}{:s}{:s} by The Assembly Armada",
+        revision,
+        GitUncommittedChanges ? "~" : "",
+        version);
 }

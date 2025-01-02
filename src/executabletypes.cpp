@@ -15,7 +15,7 @@
 
 namespace unassemblize
 {
-ExeSectionType to_section_type(const char *str)
+ExeSectionType to_section_type(std::string_view str)
 {
     if (util::equals_nocase(str, "code"))
     {

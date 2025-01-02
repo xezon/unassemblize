@@ -28,9 +28,6 @@ namespace unassemblize
 {
 class Executable
 {
-    using Address64ToIndexMap = std::unordered_map<Address64T, IndexT>;
-    using StringToIndexMap = std::unordered_map<std::string, IndexT>;
-
 public:
     Executable();
     ~Executable();
@@ -46,32 +43,31 @@ public:
     bool is_loaded() const;
     const std::string &get_filename() const;
     const ExeSections &get_sections() const;
-    const ExeSectionInfo *find_section(uint64_t address) const;
+    const ExeSectionInfo *find_section(Address64T address) const;
     const ExeSectionInfo *find_section(const std::string &name) const;
     const ExeSectionInfo *get_code_section() const;
-    uint64_t image_base() const; // Default image base address if the ASLR is not enabled.
-    uint64_t code_section_begin_from_image_base() const; // Begin address of .text section plus image base.
-    uint64_t code_section_end_from_image_base() const; // End address of .text section plus image base.
-    uint64_t all_sections_begin_from_image_base() const; // Begin address of first section plus image base.
-    uint64_t all_sections_end_from_image_base() const; // End address of last section plus image base.
-    const ExeSymbol *get_symbol(uint64_t address) const;
-    const ExeSymbol *get_symbol(const std::string &name) const;
-    const ExeSymbol *get_symbol_from_image_base(uint64_t address) const; // Adds the image base before symbol lookup.
-    const ExeSymbol *get_nearest_symbol(uint64_t address) const; // #TODO: investigate
-    const ExeSymbols &get_symbols() const;
 
-    /*
-     * Adds series of new symbols if not already present.
-     */
+    Address64T image_base() const; // Default image base address if the ASLR is not enabled.
+    Address64T code_section_begin_from_image_base() const; // Begin address of .text section plus image base.
+    Address64T code_section_end_from_image_base() const; // End address of .text section plus image base.
+    Address64T all_sections_begin_from_image_base() const; // Begin address of first section plus image base.
+    Address64T all_sections_end_from_image_base() const; // End address of last section plus image base.
+
+    const ExeSymbols &get_symbols() const;
+    const ExeSymbol *get_symbol(Address64T address) const;
+    const ExeSymbol *get_symbol(const std::string &name) const;
+    const ExeSymbol *get_symbol_from_image_base(Address64T address) const; // Adds the image base before symbol lookup.
+
+    // Adds series of new symbols if not already present.
     void add_symbols(const ExeSymbols &symbols, bool overwrite = false);
     void add_symbols(const PdbSymbolInfoVector &symbols, bool overwrite = false);
 
-    /*
-     * Adds new symbol if not already present.
-     */
+    // Adds new symbol if not already present.
     void add_symbol(const ExeSymbol &symbol, bool overwrite = false);
 
 private:
+    ExeSectionInfo *find_section(const std::string &name);
+
     void load_symbols(nlohmann::json &js, bool overwrite_symbols);
     void dump_symbols(nlohmann::json &js) const;
 
@@ -86,14 +82,15 @@ private:
     std::unique_ptr<LIEF::Binary> m_binary;
 
     ExeSections m_sections;
-    StringToIndexMap m_sectionNameToIndexMap;
     IndexT m_codeSectionIdx = ~IndexT(0);
 
     bool m_verbose = false;
 
     ExeSymbols m_symbols;
-    Address64ToIndexMap m_symbolAddressToIndexMap;
-    StringToIndexMap m_symbolNameToIndexMap;
+    Address64ToIndexMapT m_symbolAddressToIndexMap;
+
+    // Using multimap, because there can be multiple symbols sharing the same name.
+    MultiStringToIndexMapT m_symbolNameToIndexMap;
 
     ExeObjects m_targetObjects;
 

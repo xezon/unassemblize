@@ -29,16 +29,16 @@ enum class ExeSectionType
     Unknown,
 };
 
-ExeSectionType to_section_type(const char *str);
+ExeSectionType to_section_type(std::string_view str);
 const char *to_string(ExeSectionType type);
 
 struct ExeSectionInfo
 {
     std::string name;
-    const uint8_t *data;
-    Address64T address; // Position of the section within the executable.
-    uint64_t size;
-    ExeSectionType type;
+    const uint8_t *data = nullptr;
+    Address64T address = 0; // Position of the section within the executable.
+    uint64_t size = 0;
+    ExeSectionType type = ExeSectionType::Unknown;
 };
 
 struct ExeSymbol
@@ -51,8 +51,8 @@ struct ExeSymbol
 struct ExeObjectSection
 {
     std::string name;
-    Address64T offset; // Position of the object within the executable.
-    uint64_t size;
+    Address64T offset = 0; // Position of the object within the executable.
+    uint64_t size = 0;
 };
 
 struct ExeObject

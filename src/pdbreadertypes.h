@@ -120,7 +120,7 @@ using PdbFunctionInfoVector = std::vector<PdbFunctionInfo>;
 struct PdbSourceFileInfo
 {
     std::string name;
-    CV_Chksum checksumType;
+    CV_Chksum checksumType = CV_Chksum::CHKSUM_TYPE_NONE;
     std::vector<uint8_t> checksum;
     std::vector<IndexT> compilandIds; // Synonymous for indices
     std::vector<IndexT> functionIds; // Synonymous for indices
@@ -152,6 +152,9 @@ void from_json(const nlohmann::json &js, PdbCompilandInfo &d);
 
 void to_json(nlohmann::json &js, const PdbSourceFileInfo &d);
 void from_json(const nlohmann::json &js, PdbSourceFileInfo &d);
+
+void to_json(nlohmann::json &js, const PdbSymbolInfo &d);
+void from_json(const nlohmann::json &js, PdbSymbolInfo &d);
 
 void to_json(nlohmann::json &js, const PdbFunctionInfo &d);
 void from_json(const nlohmann::json &js, PdbFunctionInfo &d);

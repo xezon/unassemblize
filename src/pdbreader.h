@@ -14,7 +14,7 @@
 
 #include "pdbreadertypes.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 #define PDB_READER_WIN32
 #endif
 
@@ -31,10 +31,6 @@ namespace unassemblize
 {
 class PdbReader
 {
-#ifdef PDB_READER_WIN32
-    using Address64ToIndexMapT = std::unordered_map<Address64T, IndexT>;
-#endif
-
 public:
     PdbReader();
 
@@ -51,12 +47,16 @@ public:
     const PdbFunctionInfoVector &get_functions() const { return m_functions; }
     const PdbExeInfo &get_exe_info() const { return m_exe; }
 
+    const PdbFunctionInfo *find_function_by_address(Address64T address) const;
+
     void load_json(const nlohmann::json &js);
     bool load_config(const std::string &file_name);
     void save_json(nlohmann::json &js, bool overwrite_sections = false) const;
     bool save_config(const std::string &file_name, bool overwrite_sections = false) const;
 
 private:
+    void build_function_address_to_index_map();
+
 #ifdef PDB_READER_WIN32
     bool load_dia(const std::string &pdb_file);
     void unload_dia();
@@ -70,8 +70,7 @@ private:
 
     bool read_compilands();
     void read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT compilandId, IDiaSymbol *pSymbol);
-    void read_compiland_function(
-        PdbCompilandInfo &compilandInfo, PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol);
+    void read_compiland_function(PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol);
     void read_compiland_function_start(PdbFunctionInfo &functionInfo, IDiaSymbol *pSymbol);
     void read_compiland_function_end(PdbFunctionInfo &functionInfo, IDiaSymbol *pSymbol);
 
@@ -87,18 +86,16 @@ private:
     void read_public_symbol(PdbSymbolInfo &symbolInfo, IDiaSymbol *pSymbol);
     void read_global_symbol(PdbSymbolInfo &symbolInfo, IDiaSymbol *pSymbol);
 
-    /*
-     * This function decides on one of the input names by a fixed rule.
-     */
+    // This function decides on one of the input names by a fixed rule.
     const std::string &get_relevant_symbol_name(const std::string &name1, const std::string &name2);
     bool add_or_update_symbol(PdbSymbolInfo &&symbolInfo);
 #endif
 
 private:
 #ifdef PDB_READER_WIN32
-    /*
-     * Intermediate structures used during Pdb read.
-     */
+    // Intermediate structures used during Pdb read.
+    // #TODO: Move away into struct and pass to functions?
+
     StringToIndexMapT m_sourceFileNameToIndexMap;
     Address64ToIndexMapT m_symbolAddressToIndexMap;
     IDiaDataSource *m_pDiaSource = nullptr;
@@ -109,15 +106,15 @@ private:
 #endif
     bool m_verbose = false;
 
-    /*
-     * Persistent structures created after Pdb read.
-     */
+    // Persistent structures created after Pdb read.
+
     std::string m_pdbFilename;
     // Compilands indices match DIA2 indices.
     PdbCompilandInfoVector m_compilands;
     // Source Files indices do not match DIA2 indices (aka "unique id").
     PdbSourceFileInfoVector m_sourceFiles;
     PdbFunctionInfoVector m_functions;
+    Address64ToIndexMapT m_functionAddressToIndexMap;
     // Symbols contains every public and global symbol, including functions.
     PdbSymbolInfoVector m_symbols;
     PdbExeInfo m_exe;

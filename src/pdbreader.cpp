@@ -26,6 +26,7 @@ namespace unassemblize
 const char *const s_compilands = "pdb_compilands";
 const char *const s_sourceFiles = "pdb_source_files";
 const char *const s_functions = "pdb_functions";
+const char *const s_symbols = "pdb_symbols";
 const char *const s_exe = "pdb_exe";
 
 PdbReader::PdbReader()
@@ -62,19 +63,34 @@ bool PdbReader::load(const std::string &pdb_filename)
 
 void PdbReader::unload()
 {
-    m_compilands.clear();
-    m_sourceFiles.clear();
-    m_functions.clear();
-    m_symbols.clear();
+    util::free_container(m_pdbFilename);
+    util::free_container(m_compilands);
+    util::free_container(m_sourceFiles);
+    util::free_container(m_functions);
+    util::free_container(m_symbols);
+    util::free_container(m_functionAddressToIndexMap);
     m_exe = PdbExeInfo();
+}
+
+const PdbFunctionInfo *PdbReader::find_function_by_address(Address64T address) const
+{
+    Address64ToIndexMapT::const_iterator it = m_functionAddressToIndexMap.find(address);
+    if (it != m_functionAddressToIndexMap.cend())
+    {
+        return &m_functions[it->second];
+    }
+    return nullptr;
 }
 
 void PdbReader::load_json(const nlohmann::json &js)
 {
     js.at(s_compilands).get_to(m_compilands);
     js.at(s_sourceFiles).get_to(m_sourceFiles);
+    js.at(s_symbols).get_to(m_symbols);
     js.at(s_functions).get_to(m_functions);
     js.at(s_exe).get_to(m_exe);
+
+    build_function_address_to_index_map();
 }
 
 bool PdbReader::load_config(const std::string &file_name)
@@ -114,6 +130,10 @@ void PdbReader::save_json(nlohmann::json &js, bool overwrite_sections) const
     {
         js[s_sourceFiles] = m_sourceFiles;
     }
+    if (overwrite_sections || js.find(s_symbols) == js.end())
+    {
+        js[s_symbols] = m_symbols;
+    }
     if (overwrite_sections || js.find(s_functions) == js.end())
     {
         js[s_functions] = m_functions;
@@ -149,6 +169,17 @@ bool PdbReader::save_config(const std::string &file_name, bool overwrite_section
     fs << std::setw(2) << js << std::endl;
 
     return !fs.fail();
+}
+
+void PdbReader::build_function_address_to_index_map()
+{
+    const size_t size = m_functions.size();
+    m_functionAddressToIndexMap.reserve(size);
+    for (IndexT i = 0; i < size; ++i)
+    {
+        [[maybe_unused]] auto [_, added] = m_functionAddressToIndexMap.try_emplace(m_functions[i].address.absVirtual, i);
+        assert(added);
+    }
 }
 
 #ifdef PDB_READER_WIN32
@@ -268,8 +299,10 @@ bool PdbReader::read_symbols()
     m_functions.shrink_to_fit();
     m_symbols.shrink_to_fit();
 
-    m_sourceFileNameToIndexMap.clear();
-    m_symbolAddressToIndexMap.clear();
+    util::free_container(m_sourceFileNameToIndexMap);
+    util::free_container(m_symbolAddressToIndexMap);
+
+    build_function_address_to_index_map();
 
 #if 0 // Collects all functions that are missing in public & global symbols.
     std::vector<PdbFunctionInfo *> missingFunctions;
@@ -381,7 +414,8 @@ void PdbReader::read_source_file_initial(IDiaSourceFile *pSourceFile)
         if (pSourceFile->get_fileName(&name) == S_OK)
         {
             fileInfo.name = util::to_utf8(name);
-            m_sourceFileNameToIndexMap[fileInfo.name] = sourceFileIndex;
+            [[maybe_unused]] auto [_, added] = m_sourceFileNameToIndexMap.try_emplace(fileInfo.name, sourceFileIndex);
+            assert(added);
             SysFreeString(name);
         }
     }
@@ -555,7 +589,7 @@ void PdbReader::read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT co
             m_functions.emplace_back();
             PdbFunctionInfo &functionInfo = m_functions.back();
             functionInfo.compilandId = compilandId;
-            read_compiland_function(compilandInfo, functionInfo, functionId, pSymbol);
+            read_compiland_function(functionInfo, functionId, pSymbol);
             assert(functionInfo.address.absVirtual != 0);
             break;
         }
@@ -631,8 +665,7 @@ void PdbReader::read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT co
     }
 }
 
-void PdbReader::read_compiland_function(
-    PdbCompilandInfo &compiland_info, PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol)
+void PdbReader::read_compiland_function(PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol)
 {
     ULONGLONG dwVA;
     DWORD dwRVA;
@@ -1061,18 +1094,19 @@ bool PdbReader::add_or_update_symbol(PdbSymbolInfo &&symbolInfo)
     {
         const IndexT index = static_cast<IndexT>(m_symbols.size());
         m_symbols.emplace_back(std::move(symbolInfo));
-        m_symbolAddressToIndexMap[address] = index;
+        [[maybe_unused]] auto [_, added] = m_symbolAddressToIndexMap.try_emplace(address, index);
+        assert(added);
     }
     else
     {
-        /* This update can hit in two ways:
-         *
-         * 1) a public symbol is also a global symbol
-         *
-         * 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
-         *    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
-         *    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
-         */
+        // This update can hit in two ways:
+        //
+        // 1) a public symbol is also a global symbol
+        //
+        // 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
+        //    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
+        //    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
+
         PdbSymbolInfo &curSymbolInfo = m_symbols[it->second];
 
         if (symbolInfo.address.absVirtual != ~Address64T(0))

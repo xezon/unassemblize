@@ -15,6 +15,14 @@
 
 namespace unassemblize
 {
+WorkQueueDelayedCommand *get_last_delayed_command(WorkQueueDelayedCommand *delayedCommand)
+{
+    WorkQueueDelayedCommand *nextCommand = delayedCommand;
+    while (nextCommand->has_delayed_command())
+        nextCommand = nextCommand->next_delayed_command.get();
+    return nextCommand;
+}
+
 WorkQueueCommandId WorkQueueCommand::s_id = InvalidWorkQueueCommandId + 1; // 1
 
 WorkQueue::~WorkQueue()
@@ -61,17 +69,25 @@ bool WorkQueue::enqueue(WorkQueueDelayedCommand &delayed_command)
 
 bool WorkQueue::enqueue(WorkQueueDelayedCommandPtr &&delayed_command, WorkQueueResultPtr &result)
 {
-    WorkQueueCommandPtr chained_command = delayed_command->create(result);
+    while (delayed_command != nullptr)
+    {
+        WorkQueueCommandPtr chained_command = delayed_command->create(result);
 
-    // Delayed work can decide to not create a chained command. In this case, the command chain is done.
-    if (chained_command == nullptr)
-        return false;
+        if (chained_command == nullptr)
+        {
+            // Delayed work can decide to not create a chained command.
+            // In this case, the next delayed command is worked on.
+            delayed_command = std::move(delayed_command->next_delayed_command);
+            continue;
+        }
 
-    // Loses original command chain if next_delayed_command is set.
-    if (chained_command->next_delayed_command == nullptr)
-        chained_command->next_delayed_command = std::move(delayed_command->next_delayed_command);
+        // Moves next delayed command to the very end of the new chained command.
+        WorkQueueDelayedCommand *last_command = get_last_delayed_command(chained_command.get());
+        last_command->next_delayed_command = std::move(delayed_command->next_delayed_command);
 
-    return enqueue(std::move(chained_command));
+        return enqueue(std::move(chained_command));
+    }
+    return false;
 }
 
 bool WorkQueue::try_dequeue(WorkQueueResultPtr &result)

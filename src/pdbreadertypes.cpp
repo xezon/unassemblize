@@ -85,6 +85,26 @@ void from_json(const nlohmann::json &js, PdbSourceFileInfo &d)
     js.at("function_ids").get_to(d.functionIds);
 }
 
+void to_json(nlohmann::json &js, const PdbSymbolInfo &d)
+{
+    js = nlohmann::json{
+        {"address", d.address},
+        {"len", d.length},
+        {"name_decorated", d.decoratedName},
+        {"name_undecorated", d.undecoratedName},
+        {"name_global", d.globalName},
+    };
+}
+
+void from_json(const nlohmann::json &js, PdbSymbolInfo &d)
+{
+    js.at("address").get_to(d.address);
+    js.at("len").get_to(d.length);
+    js.at("name_decorated").get_to(d.decoratedName);
+    js.at("name_undecorated").get_to(d.undecoratedName);
+    js.at("name_global").get_to(d.globalName);
+}
+
 void to_json(nlohmann::json &js, const PdbFunctionInfo &d)
 {
     js = nlohmann::json{

@@ -10,6 +10,8 @@
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
+#include "executable.h"
+#include "pdbreader.h"
 #include "runner.h"
 #include "version.h"
 #include <assert.h>
@@ -19,14 +21,16 @@
 #include <iostream>
 #include <stdio.h>
 
-#ifdef WIN32
+#ifdef _WIN32
 #include "imguiclient/imguiwin32.h"
 #include <Windows.h>
+#else
+#include "imguiclient/imguiglfw.h"
 #endif
 
 void CreateConsole()
 {
-#ifdef WIN32
+#ifdef _WIN32
     if (::AllocConsole() == FALSE)
     {
         return;
@@ -133,7 +137,7 @@ void parse_options(int argc, char **argv)
         });
     // clang-format on
     static_assert(size_t(unassemblize::AsmFormat::DEFAULT) == 3, "Enum was changed. Update command line options.");
-    static_assert(size_t(unassemblize::MatchBundleType::None) == 2, "Enum was changed. Update command line options.");
+    static_assert(size_t(unassemblize::MatchBundleType::Count) == 3, "Enum was changed. Update command line options.");
 
     options.parse_positional({"input", "input2"});
 
@@ -261,7 +265,9 @@ void parse_options(int argc, char **argv)
 }
 
 std::unique_ptr<unassemblize::Executable> load_and_process_exe(
-    const std::string &input_file, const std::string &config_file, const unassemblize::PdbReader *pdb_reader = nullptr)
+    std::string_view input_file,
+    std::string_view config_file,
+    const unassemblize::PdbReader *pdb_reader = nullptr)
 {
     const std::string evaluated_config_file = get_config_file_name(input_file, config_file);
     std::unique_ptr<unassemblize::Executable> executable;
@@ -278,7 +284,7 @@ std::unique_ptr<unassemblize::Executable> load_and_process_exe(
     {
         if (g_options.dump_syms)
         {
-            unassemblize::SaveExeConfigOptions o(executable.get(), evaluated_config_file);
+            unassemblize::SaveExeConfigOptions o(*executable, evaluated_config_file);
             unassemblize::Runner::save_exe_config(o);
         }
         if (g_options.print_secs)
@@ -298,7 +304,7 @@ std::unique_ptr<unassemblize::Executable> load_and_process_exe(
     return executable;
 }
 
-std::unique_ptr<unassemblize::PdbReader> load_and_process_pdb(const std::string &input_file, const std::string &config_file)
+std::unique_ptr<unassemblize::PdbReader> load_and_process_pdb(std::string_view input_file, std::string_view config_file)
 {
     std::unique_ptr<unassemblize::PdbReader> pdb_reader;
 
@@ -313,7 +319,7 @@ std::unique_ptr<unassemblize::PdbReader> load_and_process_pdb(const std::string 
         if (g_options.dump_syms)
         {
             const std::string evaluated_config_file = get_config_file_name(input_file, config_file);
-            unassemblize::SavePdbConfigOptions o(pdb_reader.get(), evaluated_config_file);
+            unassemblize::SavePdbConfigOptions o(*pdb_reader, evaluated_config_file);
             unassemblize::Runner::save_pdb_config(o);
         }
     }
@@ -329,13 +335,18 @@ int main(int argc, char **argv)
 
     if (g_options.gui)
     {
-#ifdef WIN32
+#if defined(_WIN32)
+        // Windows GUI implementation
         unassemblize::gui::ImGuiWin32 gui;
-        unassemblize::gui::ImGuiStatus status = gui.run(g_options);
-        return int(status);
+#elif defined(__APPLE__) || defined(__linux__)
+        // macOS and Linux GUI implementation using GLFW
+        unassemblize::gui::ImGuiGLFW gui;
 #else
+        // Unsupported platform
         gui_error = true;
 #endif
+        unassemblize::gui::ImGuiStatus status = gui.run(g_options);
+        return int(status);
     }
     else
     {
@@ -375,16 +386,16 @@ int main(int argc, char **argv)
 
     for (size_t idx = 0; idx < executable_pair.size() && ok; ++idx)
     {
-        const InputType type = get_input_type(g_options.input_file[idx], g_options.input_type[idx]);
+        const InputType type = get_input_type(g_options.input_file[idx].v, g_options.input_type[idx].v);
 
         if (InputType::Exe == type)
         {
-            executable_pair[idx] = load_and_process_exe(g_options.input_file[idx], g_options.config_file[idx]);
+            executable_pair[idx] = load_and_process_exe(g_options.input_file[idx].v, g_options.config_file[idx].v);
             ok &= executable_pair[idx] != nullptr;
         }
         else if (InputType::Pdb == type)
         {
-            pdb_reader_pair[idx] = load_and_process_pdb(g_options.input_file[idx], g_options.config_file[idx]);
+            pdb_reader_pair[idx] = load_and_process_pdb(g_options.input_file[idx].v, g_options.config_file[idx].v);
             ok &= pdb_reader_pair[idx] != nullptr;
 
             if (ok)
@@ -392,7 +403,7 @@ int main(int argc, char **argv)
                 const unassemblize::PdbExeInfo &exe_info = pdb_reader_pair[idx]->get_exe_info();
                 const std::string input_file = unassemblize::Runner::create_exe_filename(exe_info);
                 executable_pair[idx] =
-                    load_and_process_exe(input_file, g_options.config_file[idx], pdb_reader_pair[idx].get());
+                    load_and_process_exe(input_file, g_options.config_file[idx].v, pdb_reader_pair[idx].get());
                 ok &= executable_pair[idx] != nullptr;
             }
         }
@@ -414,7 +425,7 @@ int main(int argc, char **argv)
 
         if (executable0 != nullptr && !g_options.output_file.v.empty())
         {
-            const std::string output_file = get_asm_output_file_name(executable0->get_filename(), g_options.output_file);
+            const std::string output_file = get_asm_output_file_name(executable0->get_filename(), g_options.output_file.v);
             unassemblize::AsmOutputOptions o(*executable0, output_file, g_options.start_addr, g_options.end_addr);
             o.format = g_options.format;
             o.print_indent_len = g_options.print_indent_len;
@@ -427,17 +438,18 @@ int main(int argc, char **argv)
             assert(executable1->is_loaded());
 
             const std::string output_file =
-                get_cmp_output_file_name(executable0->get_filename(), executable1->get_filename(), g_options.output_file);
+                get_cmp_output_file_name(executable0->get_filename(), executable1->get_filename(), g_options.output_file.v);
 
-            unassemblize::ExecutablePair executable_pair2 = {executable0, executable1};
-            unassemblize::PdbReaderPair pdb_reader_pair2 = {pdb_reader_pair[0].get(), pdb_reader_pair[1].get()};
+            unassemblize::ConstExecutablePair executable_pair2 = {executable0, executable1};
+            unassemblize::ConstPdbReaderPair pdb_reader_pair2 = {pdb_reader_pair[0].get(), pdb_reader_pair[1].get()};
 
             unassemblize::AsmComparisonOptions o(executable_pair2, pdb_reader_pair2, output_file);
             o.format = g_options.format;
-            if (g_options.bundle_file_idx < 2)
-                o.bundling_pdb_reader = pdb_reader_pair[g_options.bundle_file_idx].get();
-            if (o.bundling_pdb_reader != nullptr)
+            if (g_options.bundle_file_idx < 2 && pdb_reader_pair[g_options.bundle_file_idx] != nullptr)
+            {
+                o.bundle_file_idx = g_options.bundle_file_idx;
                 o.bundle_type = g_options.bundle_type;
+            }
             o.print_indent_len = g_options.print_indent_len;
             o.print_asm_len = g_options.print_asm_len;
             o.print_byte_count = g_options.print_byte_count;
