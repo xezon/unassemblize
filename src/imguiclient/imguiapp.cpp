@@ -1851,7 +1851,7 @@ void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescript
                 " Failed to load Exe: [Revision:%u] [%s] %s",
                 descriptor.m_id,
                 create_time_string(descriptor.m_exeLoadTimepoint).c_str(),
-                descriptor.m_exeFilenameCopy);
+                descriptor.m_exeFilenameCopy.c_str());
             break;
     }
 
@@ -1872,7 +1872,7 @@ void ImGuiApp::FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescript
                 " Failed to load Pdb: [Revision:%u] [%s] %s",
                 descriptor.m_id,
                 create_time_string(descriptor.m_pdbLoadTimepoint).c_str(),
-                descriptor.m_pdbFilenameCopy);
+                descriptor.m_pdbFilenameCopy.c_str());
             break;
     }
 }
