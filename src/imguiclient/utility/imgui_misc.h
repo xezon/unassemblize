@@ -11,8 +11,7 @@
  *            LICENSE
  */
 #pragma once
-
-#define IMGUI_DEFINE_MATH_OPERATORS
+#include "../imgui_config.h"
 #include "util/nocopy.h"
 #include <imgui.h>
 #include <imgui_internal.h>
