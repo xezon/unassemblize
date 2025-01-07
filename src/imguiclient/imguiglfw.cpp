@@ -12,6 +12,7 @@
  */
 #include "imguicore.h"
 
+#include "imgui_config.h"
 #ifdef __APPLE__
 #define GLFW_INCLUDE_NONE // Prevent GLFW from including gl.h
 #include <OpenGL/gl3.h> // Include only gl3.h on macOS

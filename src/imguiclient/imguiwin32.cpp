@@ -20,6 +20,7 @@
 // - Getting Started      https://dearimgui.com/getting-started
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
+#include "imgui_config.h"
 #include "util.h"
 #include "version.h"
 #include <d3d9.h>
