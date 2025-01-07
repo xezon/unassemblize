@@ -59,7 +59,7 @@ enum class AsmMatchValue
 };
 
 // Extended match value. Same as the other, but with two more states after mismatch.
-enum class AsmMatchValueEx : int
+enum class AsmMatchValueEx
 {
     IsMatch,
     IsMaybeMatch,
@@ -70,9 +70,13 @@ enum class AsmMatchValueEx : int
 
     Count
 };
+static_assert((int)AsmMatchValue::IsMatch == (int)AsmMatchValueEx::IsMatch, "Expects same value");
+static_assert((int)AsmMatchValue::IsMaybeMatch == (int)AsmMatchValueEx::IsMaybeMatch, "Expects same value");
+static_assert((int)AsmMatchValue::IsMismatch == (int)AsmMatchValueEx::IsMismatch, "Expects same value");
 
 inline constexpr std::array<std::string_view, size_t(AsmMatchValueEx::Count)> AsmMatchValueStringArray =
     {"==", "??", "xx", "<<", ">>"};
+
 static_assert(size_t(AsmMatchValueEx::Count) == 5, "Adjust array if this length has changed.");
 static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[1].size(), "Expects same length");
 static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[2].size(), "Expects same length");
