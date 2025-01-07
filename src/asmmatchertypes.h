@@ -15,6 +15,7 @@
 #include "function.h"
 #include <array>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -61,18 +62,15 @@ enum class AsmMatchValue
 // Extended match value. Same as the other, but with two more states after mismatch.
 enum class AsmMatchValueEx
 {
-    IsMatch,
-    IsMaybeMatch,
+    IsMatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMatch),
+    IsMaybeMatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMaybeMatch),
     IsMaybeMismatch = IsMaybeMatch, // Opposite wording, but same meaning.
-    IsMismatch,
+    IsMismatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMismatch),
     IsMissingLeft,
     IsMissingRight,
 
     Count
 };
-static_assert((int)AsmMatchValue::IsMatch == (int)AsmMatchValueEx::IsMatch, "Expects same value");
-static_assert((int)AsmMatchValue::IsMaybeMatch == (int)AsmMatchValueEx::IsMaybeMatch, "Expects same value");
-static_assert((int)AsmMatchValue::IsMismatch == (int)AsmMatchValueEx::IsMismatch, "Expects same value");
 
 inline constexpr std::array<std::string_view, size_t(AsmMatchValueEx::Count)> AsmMatchValueStringArray =
     {"==", "??", "xx", "<<", ">>"};
