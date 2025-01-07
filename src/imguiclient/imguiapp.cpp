@@ -857,16 +857,18 @@ void ImGuiApp::save_config_async(ProgramFileDescriptor *descriptor)
     {
         descriptor->m_revisionDescriptor->m_exeConfigFilenameCopy = descriptor->m_exeConfigFilename;
         next_command = next_command->chain(
-            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-                -> WorkQueueCommandPtr { return create_save_exe_config_command(revisionDescriptor); });
+            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor]() mutable -> WorkQueueCommandPtr {
+                return create_save_exe_config_command(revisionDescriptor);
+            });
     }
 
     if (descriptor->can_save_pdb_config())
     {
         descriptor->m_revisionDescriptor->m_pdbConfigFilenameCopy = descriptor->m_pdbConfigFilename;
         next_command = next_command->chain(
-            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor](WorkQueueResultPtr &result) mutable
-                -> WorkQueueCommandPtr { return create_save_pdb_config_command(revisionDescriptor); });
+            [descriptor, revisionDescriptor = descriptor->m_revisionDescriptor]() mutable -> WorkQueueCommandPtr {
+                return create_save_pdb_config_command(revisionDescriptor);
+            });
     }
 
     assert(head_command.next_delayed_command != nullptr);
@@ -1497,9 +1499,9 @@ void ImGuiApp::ComparisonManagerWindows()
         ProgramComparisonDescriptor &descriptor = *m_programComparisons[i];
         const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
 
-        ImScoped::Window window(title.c_str(), &descriptor.m_imguiHasOpenWindow);
+        ImScoped::Window window(title.c_str(), &descriptor.m_imguiComparisonWindowOpened);
         ImScoped::ID id(i);
-        if (window.IsContentVisible && descriptor.m_imguiHasOpenWindow)
+        if (window.IsContentVisible && descriptor.m_imguiComparisonWindowOpened)
         {
             // Main window
             {

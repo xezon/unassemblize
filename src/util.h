@@ -90,7 +90,7 @@ constexpr int compare_nocase(std::string_view str1, std::string_view str2)
 // Efficiently assign format to std like string.
 // The output string will always fit the formatted string in its entirety.
 template<typename String, typename... Args>
-void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&...args)
+void assign_format(String &output, fmt::format_string<Args...> format, Args &&...args)
 {
     const size_t initial_capacity = output.capacity();
     output.resize(initial_capacity); // Does not allocate.
