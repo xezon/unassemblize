@@ -69,7 +69,7 @@ enum class AsmMatchValueEx
     IsMissingLeft,
     IsMissingRight,
 
-    Count = 5
+    Count
 };
 
 inline constexpr std::array<std::string_view, size_t(AsmMatchValueEx::Count)> AsmMatchValueStringArray =
