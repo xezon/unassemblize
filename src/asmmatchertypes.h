@@ -59,16 +59,16 @@ enum class AsmMatchValue
 };
 
 // Extended match value. Same as the other, but with two more states after mismatch.
-enum class AsmMatchValueEx
+enum class AsmMatchValueEx : int
 {
-    IsMatch = 0,
-    IsMaybeMatch = 1,
-    IsMaybeMismatch = 1, // Opposite wording, but same meaning.
-    IsMismatch = 2,
-    IsMissingLeft = 3,
-    IsMissingRight = 4,
+    IsMatch,
+    IsMaybeMatch,
+    IsMaybeMismatch = IsMaybeMatch, // Opposite wording, but same meaning.
+    IsMismatch,
+    IsMissingLeft,
+    IsMissingRight,
 
-    Count = 5
+    Count
 };
 
 inline constexpr std::array<std::string_view, size_t(AsmMatchValueEx::Count)> AsmMatchValueStringArray =
