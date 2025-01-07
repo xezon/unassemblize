@@ -14,10 +14,10 @@
 
 #include "asyncworkstate.h"
 #include "imguiapptypes.h"
+#include "imguicore.h"
 #include "processedstate.h"
 #include "programfilecommon.h"
 #include "utility/imgui_text_filter.h"
-#include <imgui.h>
 #include <optional>
 
 namespace unassemblize::gui

@@ -196,6 +196,7 @@ target_sources(unassemblize PRIVATE
     src/imguiclient/imguiapp.cpp
     src/imguiclient/imguiapp.h
     src/imguiclient/imguiapptypes.h
+    src/imguiclient/imguicore.h
     src/imguiclient/processedstate.cpp
     src/imguiclient/processedstate.h
     src/imguiclient/programcomparisondescriptor.cpp

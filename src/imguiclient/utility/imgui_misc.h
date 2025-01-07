@@ -11,9 +11,10 @@
  *            LICENSE
  */
 #pragma once
-#include "../imgui_config.h"
+
+#include "imguiclient/imguicore.h"
 #include "util/nocopy.h"
-#include <imgui.h>
+
 #include <imgui_internal.h>
 #include <string>
 #include <string_view>

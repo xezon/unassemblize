@@ -1,7 +1,7 @@
 #pragma once
 
+#include "imguiclient/imguicore.h"
 #include "util/nocopy.h"
-#include <imgui.h>
 
 // clang-format off
 

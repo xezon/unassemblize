@@ -13,8 +13,9 @@
 #pragma once
 
 #include "commontypes.h"
+#include "imguiclient/imguicore.h"
+
 #include <functional>
-#include <imgui.h>
 #include <string_view>
 
 struct ImGuiTextFilterEx : public ImGuiTextFilter
