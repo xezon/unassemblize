@@ -1427,7 +1427,6 @@ void ImGuiApp::BackgroundWindow()
     bool window_open = true;
     ImScoped::Window window("DockSpace", &window_open, window_flags);
 
-    // Pop the style variables we pushed
     ImGui::PopStyleVar(3);
 
     if (window.IsContentVisible)
@@ -1440,7 +1439,6 @@ void ImGuiApp::BackgroundWindow()
             ImGui::DockSpace(DockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
         }
 
-        // Menu bar code
         if (ImGui::BeginMenuBar())
         {
             {
@@ -1505,7 +1503,6 @@ void ImGuiApp::ComparisonManagerWindows()
 
         if (descriptor.m_imguiComparisonWindowOpened)
         {
-            // Main window
             {
                 const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
                 ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
