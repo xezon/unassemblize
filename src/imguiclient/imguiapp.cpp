@@ -1439,7 +1439,8 @@ void ImGuiApp::BackgroundWindow()
             ImGui::DockSpace(DockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
         }
 
-        if (ImGui::BeginMenuBar())
+        ImScoped::MenuBar menuBar;
+        if (menuBar.IsOpen)
         {
             {
                 ImScoped::Menu menu("File");
@@ -1469,7 +1470,6 @@ void ImGuiApp::BackgroundWindow()
                     TooltipTextUnformattedMarker("Opens a new Assembler Comparison window.");
                 }
             }
-            ImGui::EndMenuBar();
         }
     }
 }
@@ -1540,35 +1540,39 @@ static const std::string g_select_file_dialog_title = "Select File";
 
 void ImGuiApp::FileManagerMenu()
 {
-    if (ImGui::BeginMenuBar())
+    ImScoped::MenuBar menuBar;
+    if (menuBar.IsOpen)
     {
-        if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Add File"))
+            ImScoped::Menu menu("File");
+            if (menu.IsOpen)
             {
-                add_file();
+                if (ImGui::MenuItem("Add File"))
+                {
+                    add_file();
+                }
+                if (ImGui::MenuItem("Remove All Files"))
+                {
+                    remove_all_files();
+                }
             }
-            if (ImGui::MenuItem("Remove All Files"))
-            {
-                remove_all_files();
-            }
-            ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("View"))
         {
-            ImGui::MenuItem("Show Tabs", nullptr, &m_showFileManagerWithTabs);
-            ImGui::Separator();
-            ImGui::MenuItem("Show Exe Section Info", nullptr, &m_showFileManagerExeSectionInfo);
-            ImGui::MenuItem("Show Exe Symbol Info", nullptr, &m_showFileManagerExeSymbolInfo);
-            ImGui::MenuItem("Show Pdb Compiland Info", nullptr, &m_showFileManagerPdbCompilandInfo);
-            ImGui::MenuItem("Show Pdb Source File Info", nullptr, &m_showFileManagerPdbSourceFileInfo);
-            ImGui::MenuItem("Show Pdb Symbol Info", nullptr, &m_showFileManagerPdbSymbolInfo);
-            ImGui::MenuItem("Show Pdb Function Info", nullptr, &m_showFileManagerPdbFunctionInfo);
-            ImGui::MenuItem("Show Pdb Exe Info", nullptr, &m_showFileManagerPdbExeInfo);
-            ImGui::EndMenu();
+            ImScoped::Menu menu("View");
+            if (menu.IsOpen)
+            {
+                ImGui::MenuItem("Show Tabs", nullptr, &m_showFileManagerWithTabs);
+                ImGui::Separator();
+                ImGui::MenuItem("Show Exe Section Info", nullptr, &m_showFileManagerExeSectionInfo);
+                ImGui::MenuItem("Show Exe Symbol Info", nullptr, &m_showFileManagerExeSymbolInfo);
+                ImGui::MenuItem("Show Pdb Compiland Info", nullptr, &m_showFileManagerPdbCompilandInfo);
+                ImGui::MenuItem("Show Pdb Source File Info", nullptr, &m_showFileManagerPdbSourceFileInfo);
+                ImGui::MenuItem("Show Pdb Symbol Info", nullptr, &m_showFileManagerPdbSymbolInfo);
+                ImGui::MenuItem("Show Pdb Function Info", nullptr, &m_showFileManagerPdbFunctionInfo);
+                ImGui::MenuItem("Show Pdb Exe Info", nullptr, &m_showFileManagerPdbExeInfo);
+            }
         }
-        ImGui::EndMenuBar();
     }
 }
 
