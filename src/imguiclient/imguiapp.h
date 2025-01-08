@@ -159,8 +159,6 @@ public:
     bool can_shutdown() const; // Signals that this app can shutdown.
     void shutdown();
 
-    void set_window_pos(ImVec2 pos) { m_windowPos = pos; }
-    void set_window_size(ImVec2 size) { m_windowSize = size; }
     ImGuiStatus update();
 
     const ImVec4 &get_clear_color() const { return m_clearColor; }
@@ -389,8 +387,6 @@ private:
     static ImU32 GetMismatchBitColor(const AsmMismatchInfo &mismatchInfo, AsmMatchStrictness strictness, int bit);
 
 private:
-    ImVec2 m_windowPos = ImVec2(0, 0);
-    ImVec2 m_windowSize = ImVec2(0, 0);
     ImVec4 m_clearColor = ImVec4(0.0f, 0.0f, 0.0f, 1.00f);
 
     bool m_showDemoWindow = true;

@@ -1404,77 +1404,81 @@ std::string ImGuiApp::create_time_string(std::chrono::time_point<std::chrono::sy
 
 void ImGuiApp::BackgroundWindow()
 {
-    // Configure flags for the background window
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar
-        | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
-        | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
-    // Get the main viewport
-    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    // clang-format off
+    constexpr ImGuiWindowFlags window_flags =
+        ImGuiWindowFlags_NoDecoration |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBackground |
+        ImGuiWindowFlags_MenuBar |
+        ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoDocking;
+    // clang-format on
 
     // Set window position and size to cover the entire viewport
+    ImGuiViewport *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-
-    // Push zero padding to maximize space
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-    // Begin the background window
     bool window_open = true;
-    ImGui::Begin("DockSpace", &window_open, window_flags);
+    ImScoped::Window window("DockSpace", &window_open, window_flags);
 
     // Pop the style variables we pushed
     ImGui::PopStyleVar(3);
 
-    // Submit the DockSpace
-    ImGuiIO &io = ImGui::GetIO();
-    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+    if (window.IsContentVisible)
     {
-        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-    }
-
-    // Menu bar code
-    if (ImGui::BeginMenuBar())
-    {
-        if (ImGui::BeginMenu("File"))
+        // Submit the DockSpace
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
         {
-            if (ImGui::MenuItem("Exit"))
-            {
-                prepare_shutdown_nowait();
-            }
-            ImGui::SameLine();
-            TooltipTextUnformattedMarker("Graceful shutdown. Finishes all tasks before exiting.");
-            ImGui::EndMenu();
+            ImGuiID DockSpaceId = ImGui::GetID("MyDockSpace");
+            ImGui::DockSpace(DockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
         }
 
-        if (ImGui::BeginMenu("Tools"))
+        // Menu bar code
+        if (ImGui::BeginMenuBar())
         {
-            ImGui::MenuItem("Program File Manager", nullptr, &m_showFileManager);
-            ImGui::MenuItem("Assembler Output", nullptr, &m_showOutputManager);
-
-            if (ImGui::MenuItem("New Assembler Comparison"))
             {
-                add_program_comparison();
+                ImScoped::Menu menu("File");
+                if (menu.IsOpen)
+                {
+                    if (ImGui::MenuItem("Exit"))
+                    {
+                        prepare_shutdown_nowait();
+                    }
+                    ImGui::SameLine();
+                    TooltipTextUnformattedMarker("Graceful shutdown. Finishes all tasks before exiting.");
+                }
             }
-            ImGui::SameLine();
-            TooltipTextUnformattedMarker("Opens a new Assembler Comparison window.");
-            ImGui::EndMenu();
-        }
-        ImGui::EndMenuBar();
-    }
 
-    ImGui::End();
+            {
+                ImScoped::Menu menu("Tools");
+                if (menu.IsOpen)
+                {
+                    ImGui::MenuItem("Program File Manager", nullptr, &m_showFileManager);
+                    ImGui::MenuItem("Assembler Output", nullptr, &m_showOutputManager);
+
+                    if (ImGui::MenuItem("New Assembler Comparison"))
+                    {
+                        add_program_comparison();
+                    }
+                    ImGui::SameLine();
+                    TooltipTextUnformattedMarker("Opens a new Assembler Comparison window.");
+                }
+            }
+            ImGui::EndMenuBar();
+        }
+    }
 }
 
 void ImGuiApp::FileManagerWindow(bool *p_open)
 {
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar;
-    ImScoped::Window window("File Manager", p_open, window_flags);
+    ImScoped::Window window("File Manager", p_open, ImGuiWindowFlags_MenuBar);
     if (window.IsContentVisible)
     {
         FileManagerMenu();
@@ -1499,9 +1503,7 @@ void ImGuiApp::ComparisonManagerWindows()
         ProgramComparisonDescriptor &descriptor = *m_programComparisons[i];
         const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
 
-        ImScoped::Window window(title.c_str(), &descriptor.m_imguiComparisonWindowOpened);
-        ImScoped::ID id(i);
-        if (window.IsContentVisible && descriptor.m_imguiComparisonWindowOpened)
+        if (descriptor.m_imguiComparisonWindowOpened)
         {
             // Main window
             {

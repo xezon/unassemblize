@@ -12,7 +12,6 @@
  */
 #include "imguicore.h"
 
-#include "imgui_config.h"
 #ifdef __APPLE__
 #define GLFW_INCLUDE_NONE // Prevent GLFW from including gl.h
 #include <OpenGL/gl3.h> // Include only gl3.h on macOS
@@ -199,14 +198,6 @@ bool ImGuiGLFW::update()
         glfwWaitEventsTimeout(0.1);
         return true;
     }
-
-    // Get window info
-    int window_x, window_y;
-    glfwGetWindowPos(m_window, &window_x, &window_y);
-    int width, height;
-    glfwGetFramebufferSize(m_window, &width, &height);
-    m_app->set_window_pos(ImVec2(static_cast<float>(window_x), static_cast<float>(window_y)));
-    m_app->set_window_size(ImVec2(static_cast<float>(width), static_cast<float>(height)));
 
     // Start backend frames
     ImGui_ImplOpenGL3_NewFrame();
