@@ -1435,8 +1435,8 @@ void ImGuiApp::BackgroundWindow()
         ImGuiIO &io = ImGui::GetIO();
         if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
         {
-            ImGuiID DockSpaceId = ImGui::GetID("MyDockSpace");
-            ImGui::DockSpace(DockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+            ImGuiID dockspace_id = ImGui::GetID("DockSpaceId");
+            ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
         }
 
         ImScoped::MenuBar menuBar;
