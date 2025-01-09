@@ -259,6 +259,7 @@ ImGuiStatus ImGuiApp::init(const CommandLineOptions &clo)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
+    // disable ImGuiConfigFlags_ViewportsEnable so windows stay on top of the main window
     // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
     // io.ConfigViewportsNoAutoMerge = true;
     // io.ConfigViewportsNoTaskBarIcon = true;
@@ -1448,6 +1449,7 @@ void ImGuiApp::BackgroundWindow()
                 {
                     if (ImGui::MenuItem("Exit"))
                     {
+                        // Will wait for all work to finish and then shutdown the app.
                         prepare_shutdown_nowait();
                     }
                     ImGui::SameLine();
@@ -1476,6 +1478,7 @@ void ImGuiApp::BackgroundWindow()
 
 void ImGuiApp::FileManagerWindow(bool *p_open)
 {
+    ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
     ImScoped::Window window("File Manager", p_open, ImGuiWindowFlags_MenuBar);
     if (window.IsContentVisible)
     {
@@ -1499,10 +1502,10 @@ void ImGuiApp::ComparisonManagerWindows()
     for (size_t i = 0; i < count; ++i)
     {
         ProgramComparisonDescriptor &descriptor = *m_programComparisons[i];
-        const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
 
         if (descriptor.m_imguiComparisonWindowOpened)
         {
+            // Main window
             {
                 const std::string title = fmt::format("Assembler Comparison {:d}", descriptor.m_id);
                 ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
