@@ -90,7 +90,7 @@ constexpr int compare_nocase(std::string_view str1, std::string_view str2)
 // Efficiently assign format to std like string.
 // The output string will always fit the formatted string in its entirety.
 template<typename String, typename... Args>
-void assign_format(String &output, fmt::format_string<Args...> format, Args &&...args)
+void assign_format(String &output, fmt::format_string<Args...> format, Args &&... args)
 {
     const size_t initial_capacity = output.capacity();
     output.resize(initial_capacity); // Does not allocate.
@@ -107,7 +107,7 @@ void assign_format(String &output, fmt::format_string<Args...> format, Args &&..
 // Efficiently append format to std like string.
 // The output string will always fit the formatted string in its entirety.
 template<typename String, typename... Args>
-void append_format(String &output, fmt::format_string<Args...> format, Args &&...args)
+void append_format(String &output, fmt::format_string<Args...> format, Args &&... args)
 {
     const size_t initial_size = output.size();
     const size_t initial_capacity = output.capacity();
@@ -134,7 +134,7 @@ void append_format(String &output, fmt::format_string<Args...> format, Args &&..
 // Efficiently assign format to std like string.
 // The output string is truncated if the formatted string exceeds the maximum size.
 template<typename String, typename... Args>
-void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&...args)
+void assign_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
 {
     output.resize(max_size); // May allocate if required size is larger than output string capacity.
     const auto result = fmt::format_to_n(output.begin(), max_size, format, std::forward<Args>(args)...);
@@ -146,7 +146,7 @@ void assign_format(String &output, size_t max_size, fmt::format_string<Args...> 
 // Efficiently append format to std like string.
 // The output string is truncated if the previous string plus the appended formatted string exceeds the maximum size.
 template<typename String, typename... Args>
-void append_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&...args)
+void append_format(String &output, size_t max_size, fmt::format_string<Args...> format, Args &&... args)
 {
     const size_t initial_size = output.size();
     output.resize(max_size); // May allocate if required size is larger than output string capacity.
