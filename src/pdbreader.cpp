@@ -589,7 +589,7 @@ void PdbReader::read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT co
             m_functions.emplace_back();
             PdbFunctionInfo &functionInfo = m_functions.back();
             functionInfo.compilandId = compilandId;
-            read_compiland_function(compilandInfo, functionInfo, functionId, pSymbol);
+            read_compiland_function(functionInfo, functionId, pSymbol);
             assert(functionInfo.address.absVirtual != 0);
             break;
         }
@@ -665,8 +665,7 @@ void PdbReader::read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT co
     }
 }
 
-void PdbReader::read_compiland_function(
-    PdbCompilandInfo &compiland_info, PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol)
+void PdbReader::read_compiland_function(PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol)
 {
     ULONGLONG dwVA;
     DWORD dwRVA;
@@ -1100,14 +1099,14 @@ bool PdbReader::add_or_update_symbol(PdbSymbolInfo &&symbolInfo)
     }
     else
     {
-        /* This update can hit in two ways:
-         *
-         * 1) a public symbol is also a global symbol
-         *
-         * 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
-         *    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
-         *    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
-         */
+        // This update can hit in two ways:
+        //
+        // 1) a public symbol is also a global symbol
+        //
+        // 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
+        //    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
+        //    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
+
         PdbSymbolInfo &curSymbolInfo = m_symbols[it->second];
 
         if (symbolInfo.address.absVirtual != ~Address64T(0))

@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * @brief ImGui shell for win32
+ * @brief ImGui shell for GLFW (Linux/macOS)
  *
  * @copyright Unassemblize is free software: you can redistribute it and/or
  *            modify it under the terms of the GNU General Public License
@@ -12,9 +12,10 @@
  */
 #pragma once
 
+#include "imguiapp.h"
 #include <memory>
 
-struct CommandLineOptions;
+struct GLFWwindow;
 
 namespace BS
 {
@@ -23,19 +24,25 @@ class thread_pool;
 
 namespace unassemblize::gui
 {
-enum class ImGuiStatus;
-class ImGuiApp;
-
-class ImGuiWin32
+class ImGuiGLFW
 {
 public:
-    ImGuiWin32();
-    ~ImGuiWin32();
+    ImGuiGLFW();
+    ~ImGuiGLFW();
 
     ImGuiStatus run(const CommandLineOptions &clo, BS::thread_pool *threadPool = nullptr);
 
 private:
+    bool init();
+    void shutdown();
+    bool update();
+    void render();
+    void updateDisplayScale();
+
+    GLFWwindow *m_window;
     std::unique_ptr<ImGuiApp> m_app;
+    bool m_initialized;
+    float m_dpiScale;
 };
 
 } // namespace unassemblize::gui

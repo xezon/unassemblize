@@ -14,6 +14,8 @@
 
 #include <array>
 #include <map>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -45,6 +47,11 @@ public:
 public:
     FileContentStorage();
 
+    FileContentStorage(FileContentStorage &&) = delete;
+    FileContentStorage &operator=(FileContentStorage &&) = delete;
+    FileContentStorage(const FileContentStorage &) = delete;
+    FileContentStorage &operator=(const FileContentStorage &) = delete;
+
     const TextFileContent *find_content(const std::string &name) const;
     LoadResult load_content(const std::string &name);
     size_t size() const;
@@ -53,6 +60,8 @@ public:
 private:
     FileContentMap m_filesMap;
     mutable FileContentMap::const_iterator m_lastFileIt;
+    mutable std::shared_mutex m_filesMapMutex; // Mutex taken when reading or writing the map.
+    std::mutex m_loadFileMutex; // Mutex taken before loading a file from disk.
 };
 
 } // namespace unassemblize

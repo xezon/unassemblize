@@ -30,9 +30,7 @@ namespace unassemblize
 {
 class Function;
 
-/*
- * Function disassemble setup class. Can be passed to multiple Function instances.
- */
+// Function disassemble setup class. Can be passed to multiple Function instances.
 class FunctionSetup
 {
     friend class Function;
@@ -59,56 +57,40 @@ private:
     ZydisFormatterRegisterFunc m_default_print_register;
 };
 
-/*
- * Data used within function disassemble step. Is cleared at the end of it.
- */
-class FunctionIntermediate
-{
-public:
-    using Address64ToIndexMap = std::map<Address64T, IndexT>;
-
-    explicit FunctionIntermediate(const FunctionSetup &setup) : m_setup(setup) {}
-
-    const FunctionSetup &m_setup;
-    ExeSymbols m_pseudoSymbols;
-    Address64ToIndexMap m_pseudoSymbolAddressToIndexMap;
-};
-
-/*
- * Function disassemble class.
- */
+// Function disassemble class.
 class Function
 {
     friend class FunctionSetup;
 
-    using Address64ToIndexMap = FunctionIntermediate::Address64ToIndexMap;
+    using Address64ToIndexMap = std::map<Address64T, IndexT>;
 
 public:
     Function() = default;
 
-    /*
-     * Set address range. Must not be called after disassemble, but can be called before.
-     */
+    // Set address range. Must not be called after disassemble, but can be called before.
     void set_address_range(Address64T begin_address, Address64T end_address);
 
-    /*
-     * Set source file info. Must not be called before disassembler, but can be called after.
-     */
+    // Set source file info. Must not be called before disassembler, but can be called after.
     void set_source_file(const PdbSourceFileInfo &source_file, const PdbSourceLineInfoVector &source_lines);
 
-    /*
-     * Disassemble a function from begin to end with the given setup. The address range is free to choose, but it is best
-     * used for a single function only. When complete, instruction data will be available.
-     */
+    // Disassemble a function from begin to end with the given setup. The address range is free to choose, but it is best
+    // used for a single function only. When complete, instruction data will be available.
     void disassemble(const FunctionSetup &setup, Address64T begin_address, Address64T end_address);
     void disassemble(const FunctionSetup &setup);
 
     Address64T get_begin_address() const { return m_beginAddress; }
     Address64T get_end_address() const { return m_endAddress; }
+
     const std::string &get_source_file_name() const { return m_sourceFileName; }
-    const AsmInstructionVariants &get_instructions() const { return m_instructions; }
-    uint32_t get_instruction_count() const { return m_instructionCount; }
-    uint32_t get_label_count() const { return m_labelCount; }
+
+    const AsmInstructions &get_instructions() const { return m_instructions; }
+
+    // The number of instruction addresses that refer to a symbol or pseudo symbol.
+    uint32_t get_symbol_count() const { return m_symbolCount; }
+
+    const AsmJumpDestinationInfo *get_jump_destination_info(Address64T address) const;
+
+    const ExeSymbol *get_pseudo_symbol(Address64T address) const;
 
 private:
     const FunctionSetup &get_setup() const;
@@ -121,25 +103,42 @@ private:
     ZydisFormatterFunc get_default_format_operand_ptr() const;
     ZydisFormatterRegisterFunc get_default_print_register() const;
 
+    void add_jump_destination(Address64T jumpDestination, Address64T jumpOrigin);
+
     bool add_pseudo_symbol(Address64T address, std::string_view prefix);
     const ExeSymbol *get_symbol(Address64T address) const;
     const ExeSymbol *get_symbol_from_image_base(Address64T address) const;
 
     // Zydis formatter callbacks
     static ZyanStatus UnasmFormatterPrintAddressAbsolute(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterPrintAddressRelative(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterPrintDISP(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterPrintIMM(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterFormatOperandPTR(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterFormatOperandMEM(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context);
     static ZyanStatus UnasmFormatterPrintRegister(
-        const ZydisFormatter *formatter, ZydisFormatterBuffer *buffer, ZydisFormatterContext *context, ZydisRegister reg);
+        const ZydisFormatter *formatter,
+        ZydisFormatterBuffer *buffer,
+        ZydisFormatterContext *context,
+        ZydisRegister reg);
 
     static ZyanStatus UnasmDisassembleNoFormat(
         const ZydisDecoder &decoder,
@@ -155,17 +154,27 @@ private:
         const void *buffer,
         ZyanUSize length,
         ZydisDisassembledInstruction &instruction,
-        std::string &instruction_buffer,
+        span<char> instruction_buffer,
         void *user_data);
 
 private:
-    FunctionIntermediate *m_intermediate = nullptr;
+    // Setup used during disassemble step. Is nulled at the end of it.
+    const FunctionSetup *m_setup = nullptr;
+
     Address64T m_beginAddress = 0;
     Address64T m_endAddress = 0;
     std::string m_sourceFileName;
-    AsmInstructionVariants m_instructions;
-    uint32_t m_instructionCount = 0;
-    uint32_t m_labelCount = 0;
+    AsmInstructions m_instructions;
+
+    AsmJumpDestinationInfos m_jumpDestinationInfos;
+    Address64ToIndexMap m_jumpDestinationAddressToIndexMap;
+
+    ExeSymbols m_pseudoSymbols;
+    Address64ToIndexMap m_pseudoSymbolAddressToIndexMap;
+
+    uint32_t m_symbolCount = 0;
 };
+
+const ExeSymbol *get_symbol_or_pseudo_symbol(Address64T address, const Executable &executable, const Function &function);
 
 } // namespace unassemblize

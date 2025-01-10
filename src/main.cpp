@@ -21,14 +21,19 @@
 #include <iostream>
 #include <stdio.h>
 
-#ifdef WIN32
+#define BS_THREAD_POOL_DISABLE_EXCEPTION_HANDLING
+#include <BS_thread_pool.hpp>
+
+#ifdef _WIN32
 #include "imguiclient/imguiwin32.h"
 #include <Windows.h>
+#else
+#include "imguiclient/imguiglfw.h"
 #endif
 
 void CreateConsole()
 {
-#ifdef WIN32
+#ifdef _WIN32
     if (::AllocConsole() == FALSE)
     {
         return;
@@ -74,6 +79,8 @@ void CreateConsole()
 static CommandLineOptions g_options;
 static std::string g_parseError;
 static std::string g_helpString;
+static std::unique_ptr<BS::thread_pool> g_runnerThreadPool;
+static std::unique_ptr<BS::thread_pool> g_workQueueThreadPool;
 
 void parse_options(int argc, char **argv)
 {
@@ -135,7 +142,7 @@ void parse_options(int argc, char **argv)
         });
     // clang-format on
     static_assert(size_t(unassemblize::AsmFormat::DEFAULT) == 3, "Enum was changed. Update command line options.");
-    static_assert(size_t(unassemblize::MatchBundleType::None) == 2, "Enum was changed. Update command line options.");
+    static_assert(size_t(unassemblize::MatchBundleType::Count) == 3, "Enum was changed. Update command line options.");
 
     options.parse_positional({"input", "input2"});
 
@@ -262,8 +269,51 @@ void parse_options(int argc, char **argv)
     }
 }
 
+// Overwrite thread counts for testing.
+//#define WORKQUEUE_THREADPOOL_COUNT 0
+//#define RUNNER_THREADPOOL_COUNT 0
+
+void initialize_threadpools(bool gui)
+{
+    const BS::concurrency_t threadCount = std::max<BS::concurrency_t>(std::thread::hardware_concurrency(), 1);
+    BS::concurrency_t workQueueThreadCount;
+    BS::concurrency_t runnerThreadCount;
+    if (gui)
+    {
+        workQueueThreadCount = std::max<BS::concurrency_t>(threadCount / 4, 1);
+        // -2 for main thread and work queue thread.
+        runnerThreadCount = std::max<BS::concurrency_t>(threadCount - workQueueThreadCount - 2, 1);
+    }
+    else
+    {
+        workQueueThreadCount = 0;
+        // -1 for main thread.
+        runnerThreadCount = std::max<BS::concurrency_t>(threadCount - 1, 1);
+    }
+
+#if defined(WORKQUEUE_THREADPOOL_COUNT)
+    workQueueThreadCount = WORKQUEUE_THREADPOOL_COUNT;
+#endif
+#if defined(RUNNER_THREADPOOL_COUNT)
+    runnerThreadCount = RUNNER_THREADPOOL_COUNT;
+#endif
+
+    if (workQueueThreadCount > 0)
+    {
+        g_workQueueThreadPool = std::make_unique<BS::thread_pool>(workQueueThreadCount);
+    }
+
+    if (runnerThreadCount > 0)
+    {
+        g_runnerThreadPool = std::make_unique<BS::thread_pool>(runnerThreadCount);
+        unassemblize::Runner::set_thread_pool(g_runnerThreadPool.get());
+    }
+}
+
 std::unique_ptr<unassemblize::Executable> load_and_process_exe(
-    const std::string &input_file, const std::string &config_file, const unassemblize::PdbReader *pdb_reader = nullptr)
+    std::string_view input_file,
+    std::string_view config_file,
+    const unassemblize::PdbReader *pdb_reader = nullptr)
 {
     const std::string evaluated_config_file = get_config_file_name(input_file, config_file);
     std::unique_ptr<unassemblize::Executable> executable;
@@ -300,7 +350,7 @@ std::unique_ptr<unassemblize::Executable> load_and_process_exe(
     return executable;
 }
 
-std::unique_ptr<unassemblize::PdbReader> load_and_process_pdb(const std::string &input_file, const std::string &config_file)
+std::unique_ptr<unassemblize::PdbReader> load_and_process_pdb(std::string_view input_file, std::string_view config_file)
 {
     std::unique_ptr<unassemblize::PdbReader> pdb_reader;
 
@@ -327,17 +377,24 @@ int main(int argc, char **argv)
 {
     parse_options(argc, argv);
 
+    initialize_threadpools(g_options.gui);
+
     bool gui_error = false;
 
     if (g_options.gui)
     {
-#ifdef WIN32
+#if defined(_WIN32)
+        // Windows GUI implementation
         unassemblize::gui::ImGuiWin32 gui;
-        unassemblize::gui::ImGuiStatus status = gui.run(g_options);
-        return int(status);
+#elif defined(__APPLE__) || defined(__linux__)
+        // macOS and Linux GUI implementation using GLFW
+        unassemblize::gui::ImGuiGLFW gui;
 #else
+        // Unsupported platform
         gui_error = true;
 #endif
+        unassemblize::gui::ImGuiStatus status = gui.run(g_options, g_workQueueThreadPool.get());
+        return int(status);
     }
     else
     {
@@ -377,16 +434,16 @@ int main(int argc, char **argv)
 
     for (size_t idx = 0; idx < executable_pair.size() && ok; ++idx)
     {
-        const InputType type = get_input_type(g_options.input_file[idx], g_options.input_type[idx]);
+        const InputType type = get_input_type(g_options.input_file[idx].v, g_options.input_type[idx].v);
 
         if (InputType::Exe == type)
         {
-            executable_pair[idx] = load_and_process_exe(g_options.input_file[idx], g_options.config_file[idx]);
+            executable_pair[idx] = load_and_process_exe(g_options.input_file[idx].v, g_options.config_file[idx].v);
             ok &= executable_pair[idx] != nullptr;
         }
         else if (InputType::Pdb == type)
         {
-            pdb_reader_pair[idx] = load_and_process_pdb(g_options.input_file[idx], g_options.config_file[idx]);
+            pdb_reader_pair[idx] = load_and_process_pdb(g_options.input_file[idx].v, g_options.config_file[idx].v);
             ok &= pdb_reader_pair[idx] != nullptr;
 
             if (ok)
@@ -394,7 +451,7 @@ int main(int argc, char **argv)
                 const unassemblize::PdbExeInfo &exe_info = pdb_reader_pair[idx]->get_exe_info();
                 const std::string input_file = unassemblize::Runner::create_exe_filename(exe_info);
                 executable_pair[idx] =
-                    load_and_process_exe(input_file, g_options.config_file[idx], pdb_reader_pair[idx].get());
+                    load_and_process_exe(input_file, g_options.config_file[idx].v, pdb_reader_pair[idx].get());
                 ok &= executable_pair[idx] != nullptr;
             }
         }
@@ -416,7 +473,7 @@ int main(int argc, char **argv)
 
         if (executable0 != nullptr && !g_options.output_file.v.empty())
         {
-            const std::string output_file = get_asm_output_file_name(executable0->get_filename(), g_options.output_file);
+            const std::string output_file = get_asm_output_file_name(executable0->get_filename(), g_options.output_file.v);
             unassemblize::AsmOutputOptions o(*executable0, output_file, g_options.start_addr, g_options.end_addr);
             o.format = g_options.format;
             o.print_indent_len = g_options.print_indent_len;
@@ -429,7 +486,7 @@ int main(int argc, char **argv)
             assert(executable1->is_loaded());
 
             const std::string output_file =
-                get_cmp_output_file_name(executable0->get_filename(), executable1->get_filename(), g_options.output_file);
+                get_cmp_output_file_name(executable0->get_filename(), executable1->get_filename(), g_options.output_file.v);
 
             unassemblize::ConstExecutablePair executable_pair2 = {executable0, executable1};
             unassemblize::ConstPdbReaderPair pdb_reader_pair2 = {pdb_reader_pair[0].get(), pdb_reader_pair[1].get()};

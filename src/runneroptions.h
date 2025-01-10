@@ -21,7 +21,7 @@ class FileContentStorage;
 
 struct LoadExeOptions
 {
-    LoadExeOptions(const std::string &input_file) : input_file(input_file) {}
+    LoadExeOptions(std::string_view input_file) : input_file(input_file) {}
 
     const std::string input_file;
     std::string config_file;
@@ -31,7 +31,7 @@ struct LoadExeOptions
 
 struct SaveExeConfigOptions
 {
-    SaveExeConfigOptions(const Executable &executable, const std::string &config_file) :
+    SaveExeConfigOptions(const Executable &executable, std::string_view config_file) :
         executable(executable), config_file(config_file)
     {
     }
@@ -42,7 +42,7 @@ struct SaveExeConfigOptions
 
 struct LoadPdbOptions
 {
-    LoadPdbOptions(const std::string &input_file) : input_file(input_file) {}
+    LoadPdbOptions(std::string_view input_file) : input_file(input_file) {}
 
     const std::string input_file;
     bool verbose = false;
@@ -50,7 +50,7 @@ struct LoadPdbOptions
 
 struct SavePdbConfigOptions
 {
-    SavePdbConfigOptions(const PdbReader &pdb_reader, const std::string &config_file) :
+    SavePdbConfigOptions(const PdbReader &pdb_reader, std::string_view config_file) :
         pdb_reader(pdb_reader), config_file(config_file)
     {
     }
@@ -62,7 +62,7 @@ struct SavePdbConfigOptions
 
 struct AsmOutputOptions
 {
-    AsmOutputOptions(const Executable &executable, const std::string &output_file, uint64_t start_addr, uint64_t end_addr) :
+    AsmOutputOptions(const Executable &executable, std::string_view output_file, uint64_t start_addr, uint64_t end_addr) :
         executable(executable), output_file(output_file), start_addr(start_addr), end_addr(end_addr)
     {
     }
@@ -78,7 +78,9 @@ struct AsmOutputOptions
 struct AsmComparisonOptions
 {
     AsmComparisonOptions(
-        ConstExecutablePair executable_pair, ConstPdbReaderPair pdb_reader_pair, const std::string &output_file) :
+        ConstExecutablePair executable_pair,
+        ConstPdbReaderPair pdb_reader_pair,
+        std::string_view output_file) :
         executable_pair(executable_pair), pdb_reader_pair(pdb_reader_pair), output_file(output_file)
     {
     }
@@ -117,55 +119,72 @@ struct BuildFunctionsOptions
 
 struct BuildMatchedFunctionsOptions
 {
-    BuildMatchedFunctionsOptions(NamedFunctionsPair pair) : named_functions_pair(pair) {}
+    BuildMatchedFunctionsOptions(ConstNamedFunctionsPair pair) : named_functions_pair(pair) {}
 
-    const NamedFunctionsPair named_functions_pair;
+    const ConstNamedFunctionsPair named_functions_pair;
 };
 
 struct BuildUnmatchedFunctionsOptions
 {
-    BuildUnmatchedFunctionsOptions(const NamedFunctions &named_functions, const MatchedFunctions &matched_functions) :
-        named_functions(named_functions), matched_functions(matched_functions)
+    BuildUnmatchedFunctionsOptions(
+        const NamedFunctionMatchInfos &named_functions_match_infos,
+        const MatchedFunctions &matched_functions) :
+        named_functions_match_infos(named_functions_match_infos), matched_functions(matched_functions)
     {
     }
 
-    const NamedFunctions &named_functions;
+    const NamedFunctionMatchInfos &named_functions_match_infos;
     const MatchedFunctions &matched_functions;
 };
 
 struct BuildBundlesFromCompilandsOptions
 {
-    BuildBundlesFromCompilandsOptions(const NamedFunctions &named_functions, const PdbReader &pdb_reader) :
-        named_functions(named_functions), pdb_reader(pdb_reader)
+    BuildBundlesFromCompilandsOptions(
+        const NamedFunctions &named_functions,
+        const NamedFunctionMatchInfos &named_functions_match_infos,
+        const PdbReader &pdb_reader) :
+        named_functions(named_functions), named_functions_match_infos(named_functions_match_infos), pdb_reader(pdb_reader)
     {
     }
 
     const NamedFunctions &named_functions;
+    const NamedFunctionMatchInfos &named_functions_match_infos;
     const PdbReader &pdb_reader;
+    BuildBundleFlags flags = BuildBundleFlagsAll;
 };
 
 struct BuildBundlesFromSourceFilesOptions
 {
-    BuildBundlesFromSourceFilesOptions(const NamedFunctions &named_functions, const PdbReader &pdb_reader) :
-        named_functions(named_functions), pdb_reader(pdb_reader)
+    BuildBundlesFromSourceFilesOptions(
+        const NamedFunctions &named_functions,
+        const NamedFunctionMatchInfos &named_functions_match_infos,
+        const PdbReader &pdb_reader) :
+        named_functions(named_functions), named_functions_match_infos(named_functions_match_infos), pdb_reader(pdb_reader)
     {
     }
 
     const NamedFunctions &named_functions;
+    const NamedFunctionMatchInfos &named_functions_match_infos;
     const PdbReader &pdb_reader;
+    BuildBundleFlags flags = BuildBundleFlagsAll;
 };
 
 struct BuildSingleBundleOptions
 {
     BuildSingleBundleOptions(
-        const NamedFunctions &named_functions, const MatchedFunctions &matched_functions, size_t bundle_file_idx) :
-        named_functions(named_functions), matched_functions(matched_functions), bundle_file_idx(bundle_file_idx)
+        const NamedFunctionMatchInfos &named_functions_match_infos,
+        const MatchedFunctions &matched_functions,
+        size_t bundle_file_idx) :
+        named_functions_match_infos(named_functions_match_infos),
+        matched_functions(matched_functions),
+        bundle_file_idx(bundle_file_idx)
     {
     }
 
-    const NamedFunctions &named_functions;
+    const NamedFunctionMatchInfos &named_functions_match_infos;
     const MatchedFunctions &matched_functions;
     const size_t bundle_file_idx;
+    BuildBundleFlags flags = BuildBundleFlagsAll;
 };
 
 struct DisassembleMatchedFunctionsOptions
@@ -184,16 +203,18 @@ struct DisassembleMatchedFunctionsOptions
     AsmFormat format = AsmFormat::IGAS;
 };
 
-struct DisassembleBundledFunctionsOptions
+struct DisassembleSelectedFunctionsOptions
 {
-    DisassembleBundledFunctionsOptions(
-        NamedFunctions &named_functions, NamedFunctionBundle &bundle, ConstExecutablePair executable_pair) :
-        named_functions(named_functions), bundle(bundle), executable(executable)
+    DisassembleSelectedFunctionsOptions(
+        NamedFunctions &named_functions,
+        span<const IndexT> named_function_indices,
+        const Executable &executable) :
+        named_functions(named_functions), named_function_indices(named_function_indices), executable(executable)
     {
     }
 
     NamedFunctions &named_functions;
-    NamedFunctionBundle &bundle;
+    const span<const IndexT> named_function_indices;
     const Executable &executable;
     AsmFormat format = AsmFormat::IGAS;
 };
@@ -225,16 +246,18 @@ struct BuildSourceLinesForMatchedFunctionsOptions
     const ConstPdbReaderPair pdb_reader_pair;
 };
 
-struct BuildSourceLinesForBundledFunctionsOptions
+struct BuildSourceLinesForSelectedFunctionsOptions
 {
-    BuildSourceLinesForBundledFunctionsOptions(
-        NamedFunctions &named_functions, NamedFunctionBundle &bundle, const PdbReader &pdb_reader) :
-        named_functions(named_functions), bundle(bundle), pdb_reader(pdb_reader)
+    BuildSourceLinesForSelectedFunctionsOptions(
+        NamedFunctions &named_functions,
+        span<const IndexT> named_function_indices,
+        const PdbReader &pdb_reader) :
+        named_functions(named_functions), named_function_indices(named_function_indices), pdb_reader(pdb_reader)
     {
     }
 
     NamedFunctions &named_functions;
-    NamedFunctionBundle &bundle;
+    const span<const IndexT> named_function_indices;
     const PdbReader &pdb_reader;
 };
 
@@ -252,27 +275,31 @@ struct BuildSourceLinesForFunctionsOptions
 struct LoadSourceFilesForMatchedFunctionsOptions
 {
     LoadSourceFilesForMatchedFunctionsOptions(
-        FileContentStorage &storage, NamedFunctionsPair named_functions_pair, const MatchedFunctions &matched_functions) :
+        FileContentStorage &storage,
+        ConstNamedFunctionsPair named_functions_pair,
+        const MatchedFunctions &matched_functions) :
         storage(storage), named_functions_pair(named_functions_pair), matched_functions(matched_functions)
     {
     }
 
     FileContentStorage &storage;
-    const NamedFunctionsPair named_functions_pair;
+    const ConstNamedFunctionsPair named_functions_pair;
     const MatchedFunctions &matched_functions;
 };
 
-struct LoadSourceFilesForBundledFunctionsOptions
+struct LoadSourceFilesForSelectedFunctionsOptions
 {
-    LoadSourceFilesForBundledFunctionsOptions(
-        FileContentStorage &storage, NamedFunctions &named_functions, NamedFunctionBundle &bundle) :
-        storage(storage), named_functions(named_functions), bundle(bundle)
+    LoadSourceFilesForSelectedFunctionsOptions(
+        FileContentStorage &storage,
+        const NamedFunctions &named_functions,
+        span<const IndexT> named_function_indices) :
+        storage(storage), named_functions(named_functions), named_function_indices(named_function_indices)
     {
     }
 
     FileContentStorage &storage;
-    NamedFunctions &named_functions;
-    NamedFunctionBundle &bundle;
+    const NamedFunctions &named_functions;
+    const span<const IndexT> named_function_indices;
 };
 
 struct LoadSourceFilesForFunctionsOptions
@@ -289,7 +316,8 @@ struct LoadSourceFilesForFunctionsOptions
 struct BuildComparisonRecordsForMatchedFunctionsOptions
 {
     BuildComparisonRecordsForMatchedFunctionsOptions(
-        MatchedFunctions &matched_functions, ConstNamedFunctionsPair named_functions_pair) :
+        MatchedFunctions &matched_functions,
+        ConstNamedFunctionsPair named_functions_pair) :
         matched_functions(matched_functions), named_functions_pair(named_functions_pair)
     {
     }
@@ -299,17 +327,21 @@ struct BuildComparisonRecordsForMatchedFunctionsOptions
     uint32_t lookahead_limit = 20;
 };
 
-struct BuildComparisonRecordsForBundledFunctionsOptions
+struct BuildComparisonRecordsForSelectedFunctionsOptions
 {
-    BuildComparisonRecordsForBundledFunctionsOptions(
-        MatchedFunctions &matched_functions, ConstNamedFunctionsPair named_functions_pair, NamedFunctionBundle &bundle) :
-        matched_functions(matched_functions), named_functions_pair(named_functions_pair), bundle(bundle)
+    BuildComparisonRecordsForSelectedFunctionsOptions(
+        MatchedFunctions &matched_functions,
+        ConstNamedFunctionsPair named_functions_pair,
+        span<const IndexT> matched_function_indices) :
+        matched_functions(matched_functions),
+        named_functions_pair(named_functions_pair),
+        matched_function_indices(matched_function_indices)
     {
     }
 
     MatchedFunctions &matched_functions;
     const ConstNamedFunctionsPair named_functions_pair;
-    NamedFunctionBundle &bundle;
+    const span<const IndexT> matched_function_indices;
     uint32_t lookahead_limit = 20;
 };
 

@@ -14,7 +14,7 @@
 
 #include "pdbreadertypes.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 #define PDB_READER_WIN32
 #endif
 
@@ -70,8 +70,7 @@ private:
 
     bool read_compilands();
     void read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT compilandId, IDiaSymbol *pSymbol);
-    void read_compiland_function(
-        PdbCompilandInfo &compilandInfo, PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol);
+    void read_compiland_function(PdbFunctionInfo &functionInfo, IndexT functionId, IDiaSymbol *pSymbol);
     void read_compiland_function_start(PdbFunctionInfo &functionInfo, IDiaSymbol *pSymbol);
     void read_compiland_function_end(PdbFunctionInfo &functionInfo, IDiaSymbol *pSymbol);
 
@@ -87,18 +86,16 @@ private:
     void read_public_symbol(PdbSymbolInfo &symbolInfo, IDiaSymbol *pSymbol);
     void read_global_symbol(PdbSymbolInfo &symbolInfo, IDiaSymbol *pSymbol);
 
-    /*
-     * This function decides on one of the input names by a fixed rule.
-     */
+    // This function decides on one of the input names by a fixed rule.
     const std::string &get_relevant_symbol_name(const std::string &name1, const std::string &name2);
     bool add_or_update_symbol(PdbSymbolInfo &&symbolInfo);
 #endif
 
 private:
 #ifdef PDB_READER_WIN32
-    /*
-     * Intermediate structures used during Pdb read.
-     */
+    // Intermediate structures used during Pdb read.
+    // #TODO: Move away into struct and pass to functions?
+
     StringToIndexMapT m_sourceFileNameToIndexMap;
     Address64ToIndexMapT m_symbolAddressToIndexMap;
     IDiaDataSource *m_pDiaSource = nullptr;
@@ -109,9 +106,8 @@ private:
 #endif
     bool m_verbose = false;
 
-    /*
-     * Persistent structures created after Pdb read.
-     */
+    // Persistent structures created after Pdb read.
+
     std::string m_pdbFilename;
     // Compilands indices match DIA2 indices.
     PdbCompilandInfoVector m_compilands;

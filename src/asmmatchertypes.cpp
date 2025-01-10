@@ -15,6 +15,19 @@
 
 namespace unassemblize
 {
+AsmMatchStrictness to_asm_match_strictness(std::string_view str)
+{
+    for (size_t i = 0; i < AsmMatchStrictnessCount; ++i)
+    {
+        if (util::equals_nocase(str, to_string(AsmMatchStrictness(i))))
+        {
+            return AsmMatchStrictness(i);
+        }
+    }
+    printf("Unrecognized asm match to_asm_match_strictness '%.*s'. Defaulting to 'Undecided'", PRINTF_STRING(str));
+    return AsmMatchStrictness::Undecided;
+}
+
 AsmMatchValue AsmMismatchInfo::get_match_value(AsmMatchStrictness strictness) const
 {
     switch (strictness)
@@ -42,6 +55,24 @@ AsmMatchValue AsmMismatchInfo::get_match_value(AsmMatchStrictness strictness) co
     }
 }
 
+AsmMatchValueEx AsmMismatchInfo::get_match_value_ex(AsmMatchStrictness strictness) const
+{
+    const AsmMatchValue matchValue = get_match_value(strictness);
+    if (matchValue == AsmMatchValue::IsMismatch)
+    {
+        if (mismatch_reasons & AsmMismatchReason_MissingLeft)
+            return AsmMatchValueEx::IsMissingLeft;
+        else if (mismatch_reasons & AsmMismatchReason_MissingRight)
+            return AsmMatchValueEx::IsMissingRight;
+        else
+            return AsmMatchValueEx::IsMismatch;
+    }
+    else
+    {
+        return static_cast<AsmMatchValueEx>(matchValue);
+    }
+}
+
 bool AsmMismatchInfo::is_match() const
 {
     return mismatch_bits == 0 && maybe_mismatch_bits == 0 && mismatch_reasons == 0;
@@ -62,30 +93,67 @@ bool AsmMismatchInfo::is_maybe_mismatch() const
     return is_maybe_match();
 }
 
-AsmMatchStrictness to_asm_match_strictness(const char *str)
+uint8_t AsmComparisonRecord::is_symbol() const
 {
-    if (util::equals_nocase(str, "lenient"))
+    uint8_t bits = 0;
+    for (int i = 0; i < 2; ++i)
     {
-        return AsmMatchStrictness::Lenient;
+        if (pair[i] != nullptr && pair[i]->isSymbol)
+            bits |= (1 << i);
     }
-    else if (util::equals_nocase(str, "undecided"))
+    return bits;
+}
+
+std::optional<ptrdiff_t> get_record_distance(
+    const AsmComparisonRecords &records,
+    Side side,
+    Address64T address1,
+    Address64T address2)
+{
+    // Linear search instead of binary search, because there can be null elements. Expensive.
+
+    AsmComparisonRecords::const_iterator it1 =
+        std::find_if(records.begin(), records.end(), [=](const AsmComparisonRecord &record) {
+            const AsmInstruction *instruction = record.pair[side];
+            if (instruction != nullptr)
+                return instruction->address == address1;
+            return false;
+        });
+
+    if (it1 != records.end())
     {
-        return AsmMatchStrictness::Undecided;
+        // Search front or back range depending where address2 is.
+        AsmComparisonRecords::const_iterator begin;
+        AsmComparisonRecords::const_iterator end;
+        if (address1 < address2)
+        {
+            begin = it1;
+            end = records.end();
+        }
+        else
+        {
+            begin = records.begin();
+            end = it1;
+        }
+        AsmComparisonRecords::const_iterator it2 =
+            std::find_if(records.begin(), records.end(), [=](const AsmComparisonRecord &record) {
+                const AsmInstruction *instruction = record.pair[side];
+                if (instruction != nullptr)
+                    return instruction->address == address2;
+                return false;
+            });
+
+        if (it2 != records.end())
+        {
+            return std::distance(it1, it2);
+        }
     }
-    else if (util::equals_nocase(str, "strict"))
-    {
-        return AsmMatchStrictness::Strict;
-    }
-    else
-    {
-        printf("Unrecognized asm match to_asm_match_strictness '%s'. Defaulting to 'Undecided'", str);
-        return AsmMatchStrictness::Undecided;
-    }
+    return std::nullopt;
 }
 
 uint32_t AsmComparisonResult::get_instruction_count() const
 {
-    return match_count + maybe_match_count + mismatch_count;
+    return static_cast<uint32_t>(records.size());
 }
 
 uint32_t AsmComparisonResult::get_match_count(AsmMatchStrictness strictness) const
@@ -154,27 +222,35 @@ float AsmComparisonResult::get_max_similarity(AsmMatchStrictness strictness) con
     return float(get_max_match_count(strictness)) / float(get_instruction_count());
 }
 
-size_t NamedFunctionBundle::get_total_function_count() const
+int8_t AsmComparisonResult::get_similarity_as_int(AsmMatchStrictness strictness) const
 {
-    return matchedNamedFunctions.size() + unmatchedNamedFunctions.size();
+    return get_match_count(strictness) * 100 / get_instruction_count();
+}
+
+int8_t AsmComparisonResult::get_max_similarity_as_int(AsmMatchStrictness strictness) const
+{
+    return get_max_match_count(strictness) * 100 / get_instruction_count();
 }
 
 bool NamedFunction::is_disassembled() const
 {
-    return function.get_instruction_count() != 0;
+    if (isDisassembled)
+    {
+        assert(!function.get_instructions().empty());
+    }
+    return isDisassembled;
 }
 
-bool NamedFunction::is_linked_to_source_file() const
+TriState NamedFunction::is_linked_to_source_file() const
 {
-    return !function.get_source_file_name().empty();
+    if (isLinkedToSourceFile == TriState::True)
+    {
+        assert(!function.get_source_file_name().empty());
+    }
+    return isLinkedToSourceFile;
 }
 
-bool NamedFunction::Has_loaded_source_file() const
-{
-    return has_loaded_source_file;
-}
-
-bool NamedFunction::is_matched() const
+bool NamedFunctionMatchInfo::is_matched() const
 {
     return matched_index != ~IndexT(0);
 }
@@ -184,91 +260,7 @@ bool MatchedFunction::is_compared() const
     return !comparison.records.empty();
 }
 
-bool NamedFunctionBundle::has_completed_disassembling() const
-{
-    return disassembledCount == get_total_function_count();
-}
-
-bool NamedFunctionBundle::has_completed_source_file_linking() const
-{
-    return linkedSourceFileCount + missingSourceFileCount == get_total_function_count();
-}
-
-bool NamedFunctionBundle::has_completed_source_file_loading() const
-{
-    return has_completed_source_file_linking() && loadedSourceFileCount == linkedSourceFileCount;
-}
-
-bool NamedFunctionBundle::has_completed_comparison() const
-{
-    return comparedCount == get_total_function_count();
-}
-
-void NamedFunctionBundle::update_disassembled_count(const NamedFunctions &named_functions)
-{
-    disassembledCount = 0;
-    for (IndexT i : matchedNamedFunctions)
-    {
-        if (named_functions[i].is_disassembled())
-            ++disassembledCount;
-    }
-    for (IndexT i : unmatchedNamedFunctions)
-    {
-        if (named_functions[i].is_disassembled())
-            ++disassembledCount;
-    }
-}
-
-void NamedFunctionBundle::update_linked_source_file_count(const NamedFunctions &named_functions)
-{
-    linkedSourceFileCount = 0;
-    for (IndexT i : matchedNamedFunctions)
-    {
-        if (named_functions[i].is_linked_to_source_file())
-            ++linkedSourceFileCount;
-        else if (!named_functions[i].can_link_to_source_file)
-            ++missingSourceFileCount;
-    }
-    for (IndexT i : unmatchedNamedFunctions)
-    {
-        if (named_functions[i].is_linked_to_source_file())
-            ++linkedSourceFileCount;
-        else if (!named_functions[i].can_link_to_source_file)
-            ++missingSourceFileCount;
-    }
-}
-
-void NamedFunctionBundle::update_loaded_source_file_count(const NamedFunctions &named_functions)
-{
-    loadedSourceFileCount = 0;
-    for (IndexT i : matchedNamedFunctions)
-    {
-        if (named_functions[i].Has_loaded_source_file())
-            ++loadedSourceFileCount;
-    }
-    for (IndexT i : unmatchedNamedFunctions)
-    {
-        if (named_functions[i].Has_loaded_source_file())
-            ++loadedSourceFileCount;
-    }
-}
-
-void NamedFunctionBundle::update_compared_count(const MatchedFunctions &matched_functions)
-{
-    comparedCount = 0;
-    for (IndexT i : matchedNamedFunctions)
-    {
-        if (matched_functions[i].is_compared())
-            ++linkedSourceFileCount;
-    }
-    for (IndexT i : unmatchedNamedFunctions)
-    {
-        if (matched_functions[i].is_compared())
-            ++linkedSourceFileCount;
-    }
-}
-
-MatchBundleType to_match_bundle_type(const char *str)
+MatchBundleType to_match_bundle_type(std::string_view str)
 {
     if (util::equals_nocase(str, "compiland"))
     {
@@ -284,10 +276,10 @@ MatchBundleType to_match_bundle_type(const char *str)
     }
     else
     {
-        printf("Unrecognized match bundle type '%s'. Defaulting to 'None'", str);
+        printf("Unrecognized match bundle type '%.*s'. Defaulting to 'None'", PRINTF_STRING(str));
         return MatchBundleType::None;
     }
-    static_assert(size_t(MatchBundleType::None) == 2, "Enum was changed. Update conditions.");
+    static_assert(size_t(MatchBundleType::Count) == 3, "Enum was changed. Update conditions.");
 }
 
 } // namespace unassemblize

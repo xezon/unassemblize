@@ -120,7 +120,7 @@ using PdbFunctionInfoVector = std::vector<PdbFunctionInfo>;
 struct PdbSourceFileInfo
 {
     std::string name;
-    CV_Chksum checksumType;
+    CV_Chksum checksumType = CV_Chksum::CHKSUM_TYPE_NONE;
     std::vector<uint8_t> checksum;
     std::vector<IndexT> compilandIds; // Synonymous for indices
     std::vector<IndexT> functionIds; // Synonymous for indices

@@ -1,67 +1,64 @@
-# Building
+# Building Unassemblize
 
-## Ubuntu 20.04 or higher
+## Quick Start
 
-Install dependencies:
+### Windows
+- Install Visual Studio 2022 with C++ desktop development workload
+- Open the project folder in VS 2022
+- Select your build configuration (Debug/Release)
+- Build Solution (F7)
+
+### macOS
 ```sh
-export DEBIAN_FRONTEND=noninteractive
+# Install dependencies
+brew install cmake ccache clang-format doxygen graphviz glfw
 
-apt-get update && apt-get install -y \
+# Clone and build
+git clone https://github.com/OmniBlade/unassemblize.git
+cd unassemblize
+mkdir build && cd build
+cmake ..
+make -j$(sysctl -n hw.ncpu)
+```
+
+### Ubuntu 22.04 or higher
+```sh
+# Install dependencies
+sudo apt-get update && sudo apt-get install -y \
   ccache \
   clang \
   clang-format \
   cmake \
   doxygen \
   git \
-  graphviz
-```
+  graphviz \
+  libglfw3-dev \
+  libgl1-mesa-dev \
+  xorg-dev
 
-Clone repository and navigate inside:
-```sh
+# Clone and build
 git clone https://github.com/OmniBlade/unassemblize.git
-cd unassemblize/
-```
-
-Generate build configuration
-```sh
+cd unassemblize
 mkdir build && cd build
 cmake ..
-
-# workaround for "gcc: error: unrecognized command line option '-fcolor-diagnostics'"
-sed -i 's/-fcolor-diagnostics//' _deps/lief-build/CMakeFiles/LIB_LIEF.dir/flags.make
+make -j$(nproc)
 ```
 
-Compile:
+## Docker (CLI Only)
+For command-line usage only, you can use our Docker container:
 ```sh
-make --jobs $(nproc)
-
-wait...
-
-[100%] Built target unassemblize
+docker build -t unassemblize .
+docker run -v $(pwd):/work unassemblize [OPTIONS] [INPUT]
 ```
 
-Run executable:
+## Usage
+
+For a graphical interface, launch with:
+```sh
+./unassemblize --gui
 ```
-$ ./unassemblize
 
-unassemblize r6 ~201fc23
-    x86 Unassembly tool
-
-Usage:
-  unassemblize [OPTIONS] [INPUT]
-Options:
-  -o --output     Filename for single file output. Default is program.S
-  -f --format     Assembly output format.
-  -c --config     Configuration file describing how to dissassemble the input
-                  file and containing extra symbol info. Default: config.json
-  -s --start      Starting address of a single function to dissassemble in
-                  hexidecimal notation.
-  -e --end        Ending address of a single function to dissassemble in
-                  hexidecimal notation.
-  -v --verbose    Verbose output on current state of the program.
-  --section       Section to target for dissassembly, defaults to '.text'.
-  --listsections  Prints a list of sections in the exe then exits.
-  -d --dumpsyms   Dumps symbols stored in the executable to the config file.
-                  then exits.
-  -h --help       Displays this help.
+To see all available options and commands, run:
+```sh
+./unassemblize --help
 ```

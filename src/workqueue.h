@@ -18,7 +18,13 @@
 #include "runner.h"
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <thread>
+
+namespace BS
+{
+class thread_pool;
+}
 
 namespace unassemblize
 {
@@ -34,9 +40,11 @@ using WorkQueueResultPtr = std::unique_ptr<WorkQueueResult>;
 using WorkQueueCommandId = uint32_t;
 inline constexpr WorkQueueCommandId InvalidWorkQueueCommandId = 0;
 
-using WorkQueueCommandCreateFunction = std::function<WorkQueueCommandPtr(WorkQueueResultPtr &result)>;
+using WorkQueueCommandCreateFunction = std::function<WorkQueueCommandPtr()>;
 using WorkQueueCommandWorkFunction = std::function<WorkQueueResultPtr(void)>;
 using WorkQueueCommandCallbackFunction = std::function<void(WorkQueueResultPtr &result)>;
+
+WorkQueueDelayedCommand *get_last_delayed_command(WorkQueueDelayedCommand *delayedCommand);
 
 // The delayed command is a substitute for a real command, used to chain commands on demand.
 struct WorkQueueDelayedCommand
@@ -47,8 +55,6 @@ struct WorkQueueDelayedCommand
 
     // Optional function to create and chain 1 new command.
     // The function is invoked after the previous command has completed its work and has returned its result.
-    // Note 1: The delayed command is result->command->next_delayed_command at the time of invocation.
-    // Note 2: The result is null if the delayed command is the head of the command chain.
     WorkQueueDelayedCommand *chain(WorkQueueCommandCreateFunction &&create_function)
     {
         // It would be possible to chain multiple, but currently we just chain one maximum.
@@ -57,6 +63,12 @@ struct WorkQueueDelayedCommand
         next_delayed_command = std::make_unique<WorkQueueDelayedCommand>();
         next_delayed_command->create = create_function;
         return next_delayed_command.get();
+    }
+
+    WorkQueueDelayedCommand *chain_to_last(WorkQueueCommandCreateFunction &&create_function)
+    {
+        WorkQueueDelayedCommand *next_command = get_last_delayed_command(this);
+        return next_command->chain(std::move(create_function));
     }
 
     WorkQueueDelayedCommandPtr next_delayed_command;
@@ -83,10 +95,6 @@ struct WorkQueueCommand : public WorkQueueDelayedCommand
     // The result will not be pushed to the polling queue.
     WorkQueueCommandCallbackFunction callback;
 
-    // Optional context. Can point to address or store an id.
-    // Necessary to identify when polling.
-    void *context = nullptr;
-
     const WorkQueueCommandId command_id;
 
 private:
@@ -100,6 +108,7 @@ struct WorkQueueResult
     WorkQueueCommandPtr command;
 };
 
+// All public functions are meant to be called from a single thread only.
 class WorkQueue
 {
     friend class WorkQueueCommandQuit;
@@ -111,54 +120,43 @@ class WorkQueue
     using BlockingReaderWriterQueue = moodycamel::BlockingReaderWriterQueue<T, MAX_BLOCK_SIZE>;
 
 public:
-    WorkQueue() : m_commandQueue(31), m_pollingQueue(31), m_callbackQueue(31){};
+    explicit WorkQueue(BS::thread_pool *threadPool = nullptr) :
+        m_threadPool(threadPool), m_commandQueue(31), m_callbackQueue(31){};
     ~WorkQueue();
 
     void start();
+
+    // Must keep calling update_callbacks if wait=false until is_busy returns false.
     void stop(bool wait);
 
+    // Returns true as long as the work queue thread is running and waiting or working on commands.
     bool is_busy() const;
-    bool is_quitting() const { return m_quit; }
-
-    WorkQueueCommandId get_last_finished_command_id() const { return m_lastFinishedCommandId.load(); }
 
     bool enqueue(WorkQueueCommandPtr &&command);
     bool enqueue(WorkQueueDelayedCommand &delayed_command);
 
-    bool try_dequeue(WorkQueueResultPtr &result);
-
+    // Updates callbacks and delayed commands.
     void update_callbacks();
 
 private:
-    bool enqueue(WorkQueueDelayedCommandPtr &&delayed_command, WorkQueueResultPtr &result);
+    bool enqueue(WorkQueueDelayedCommandPtr &&delayed_command);
 
     static void ThreadFunction(WorkQueue *self);
     void ThreadRun();
+    void DoWork(WorkQueueCommandPtr &&command, bool pooled);
+    bool HasPendingTasks() const;
+
+private:
+    BS::thread_pool *m_threadPool = nullptr; // Used to work on commands.
+    std::thread m_thread; // Used to dequeue commands.
 
     BlockingReaderWriterQueue<WorkQueueCommandPtr, 32> m_commandQueue;
-    ReaderWriterQueue<WorkQueueResultPtr, 32> m_pollingQueue;
     ReaderWriterQueue<WorkQueueResultPtr, 32> m_callbackQueue;
+    std::atomic<int> m_callbackQueueSize = 0;
+    std::mutex m_callbackMutex;
 
-    std::thread m_thread;
-
-    std::atomic<WorkQueueCommandId> m_lastFinishedCommandId = InvalidWorkQueueCommandId;
-
-    volatile bool m_quit = false;
-};
-
-struct WorkQueueCommandQuit : public WorkQueueCommand
-{
-    WorkQueueCommandQuit(WorkQueue &owner_queue) : m_ownerQueue(owner_queue)
-    {
-        WorkQueueCommand::work = [this]() {
-            m_ownerQueue.m_quit = true;
-            return WorkQueueResultPtr();
-        };
-    }
-
-    virtual ~WorkQueueCommandQuit() override = default;
-
-    WorkQueue &m_ownerQueue;
+    std::atomic<bool> m_busy = false;
+    std::atomic<bool> m_quit = false;
 };
 
 } // namespace unassemblize

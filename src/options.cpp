@@ -14,18 +14,18 @@
 #include "util.h"
 #include <filesystem>
 
-bool is_auto_str(const std::string &str)
+bool is_auto_str(std::string_view str)
 {
     return util::equals_nocase(str, auto_str);
 }
 
-std::string get_config_file_name(const std::string &input_file, const std::string &config_file)
+std::string get_config_file_name(std::string_view input_file, std::string_view config_file)
 {
     if (is_auto_str(config_file))
     {
         if (input_file.empty())
         {
-            return std::string();
+            return {};
         }
 
         // path/program.config.json
@@ -33,16 +33,16 @@ std::string get_config_file_name(const std::string &input_file, const std::strin
         path.replace_extension("config.json");
         return path.string();
     }
-    return config_file;
+    return std::string(config_file);
 }
 
-std::string get_asm_output_file_name(const std::string &input_file, const std::string &output_file)
+std::string get_asm_output_file_name(std::string_view input_file, std::string_view output_file)
 {
     if (is_auto_str(output_file))
     {
         if (input_file.empty())
         {
-            return std::string();
+            return {};
         }
 
         // path/program.S
@@ -50,11 +50,13 @@ std::string get_asm_output_file_name(const std::string &input_file, const std::s
         path.replace_extension("S");
         return path.string();
     }
-    return output_file;
+    return std::string(output_file);
 }
 
-std::string
-    get_cmp_output_file_name(const std::string &input_file0, const std::string &input_file1, const std::string &output_file)
+std::string get_cmp_output_file_name(
+    std::string_view input_file0,
+    std::string_view input_file1,
+    std::string_view output_file)
 {
     if (is_auto_str(output_file))
     {
@@ -68,10 +70,10 @@ std::string
         path += "_cmp.txt";
         return path.string();
     }
-    return output_file;
+    return std::string(output_file);
 }
 
-InputType to_input_type(const char *str)
+InputType to_input_type(std::string_view str)
 {
     if (util::equals_nocase(str, s_input_type_names[size_t(InputType::Pdb)]))
     {
@@ -83,13 +85,13 @@ InputType to_input_type(const char *str)
     }
     else
     {
-        printf("Unrecognized input type '%s'. Defaulting to 'None'", str);
+        printf("Unrecognized input type '%.*s'. Defaulting to 'None'", PRINTF_STRING(str));
         return InputType::None;
     }
     static_assert(size_t(InputType::None) == 2, "Enum was changed. Update conditions.");
 }
 
-InputType get_input_type(const std::string &input_file, const std::string &input_type)
+InputType get_input_type(std::string_view input_file, std::string_view input_type)
 {
     InputType type = InputType::None;
 
@@ -109,7 +111,7 @@ InputType get_input_type(const std::string &input_file, const std::string &input
         }
         else
         {
-            type = to_input_type(input_type.c_str());
+            type = to_input_type(input_type);
         }
     }
     return type;

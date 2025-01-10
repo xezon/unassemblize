@@ -11,6 +11,8 @@
  *            LICENSE
  */
 #include "filecontentstorage.h"
+#include "util.h"
+#include <assert.h>
 #include <fstream>
 
 namespace unassemblize
@@ -26,6 +28,8 @@ const TextFileContent *FileContentStorage::find_content(const std::string &name)
     {
         return nullptr;
     }
+
+    util::shared_lock_guard readLock(m_filesMapMutex);
 
     // Fast path lookup.
     if (m_lastFileIt != m_filesMap.cend() && name == m_lastFileIt->first)
@@ -46,11 +50,18 @@ const TextFileContent *FileContentStorage::find_content(const std::string &name)
 
 FileContentStorage::LoadResult FileContentStorage::load_content(const std::string &name)
 {
-    FileContentMap::iterator it = m_filesMap.find(name);
-    if (it != m_filesMap.end())
+    // Take exclusive mutex to prevent multiple threads potentially loading the same file.
+    std::lock_guard writeLock1(m_loadFileMutex);
+
+    FileContentMap::iterator it;
     {
-        // Is already loaded.
-        return LoadResult::AlreadyLoaded;
+        util::shared_lock_guard readLock(m_filesMapMutex);
+        it = m_filesMap.find(name);
+        if (it != m_filesMap.end())
+        {
+            // Is already loaded.
+            return LoadResult::AlreadyLoaded;
+        }
     }
 
     std::ifstream fs(name);
@@ -77,17 +88,22 @@ FileContentStorage::LoadResult FileContentStorage::load_content(const std::strin
         return LoadResult::Failed;
     }
 
-    m_lastFileIt = m_filesMap.insert(it, std::make_pair(name, std::move(content)));
+    {
+        std::lock_guard writeLock2(m_filesMapMutex);
+        m_lastFileIt = m_filesMap.insert(it, std::make_pair(name, std::move(content)));
+    }
     return LoadResult::Loaded;
 }
 
 size_t FileContentStorage::size() const
 {
+    util::shared_lock_guard readLock(m_filesMapMutex);
     return m_filesMap.size();
 }
 
 void FileContentStorage::clear()
 {
+    std::lock_guard writeLock(m_filesMapMutex);
     m_filesMap.clear();
     m_lastFileIt = m_filesMap.cend();
 }
