@@ -20,6 +20,13 @@
 
 namespace unassemblize
 {
+Executable::Executable()
+{
+}
+
+Executable::~Executable()
+{
+}
 
 bool Executable::load(const std::string &exe_filename)
 {
