@@ -47,6 +47,7 @@ if(WINDOWS)
         ${IMGUI_DIR}/backends
     )
 
+    # Windows uses DirectX, no need for OpenGL
     target_link_libraries(imgui_win32 PRIVATE DirectX::D3D9)
     set(IMGUI_LIBRARY imgui_win32)
 else()
