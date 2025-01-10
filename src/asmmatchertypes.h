@@ -15,36 +15,88 @@
 #include "function.h"
 #include <array>
 #include <string>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
 namespace unassemblize
 {
+enum Side : uint8_t
+{
+    LeftSide = 0,
+    RightSide = 1,
+};
+
+inline Side get_opposite_side(Side side)
+{
+    return static_cast<Side>((side + 1) % 2);
+}
+
 enum class AsmMatchStrictness
 {
     Lenient, // Unknown to known/unknown symbol pairs are treated as match.
     Undecided, // Unknown to known/unknown symbol pairs are treated as undecided, maybe match or mismatch.
     Strict, // Unknown to known/unknown symbol pairs are treated as mismatch.
 };
+inline constexpr size_t AsmMatchStrictnessCount = 3;
+
+inline constexpr std::array<const char *, AsmMatchStrictnessCount> s_asmMatchStrictnessNames = {
+    "Lenient",
+    "Undecided",
+    "Strict"};
+
+inline constexpr const char *to_string(AsmMatchStrictness strictness)
+{
+    return s_asmMatchStrictnessNames[static_cast<size_t>(strictness)];
+}
+AsmMatchStrictness to_asm_match_strictness(std::string_view str);
 
 enum class AsmMatchValue
 {
     IsMatch,
     IsMaybeMatch,
-    IsMaybeMismatch = IsMaybeMatch,
+    IsMaybeMismatch = IsMaybeMatch, // Opposite wording, but same meaning.
     IsMismatch,
+};
+
+// Extended match value. Same as the other, but with two more states after mismatch.
+enum class AsmMatchValueEx
+{
+    IsMatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMatch),
+    IsMaybeMatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMaybeMatch),
+    IsMaybeMismatch = IsMaybeMatch, // Opposite wording, but same meaning.
+    IsMismatch = static_cast<std::underlying_type_t<AsmMatchValueEx>>(AsmMatchValue::IsMismatch),
+    IsMissingLeft,
+    IsMissingRight,
+
+    Count
+};
+
+inline constexpr std::array<std::string_view, size_t(AsmMatchValueEx::Count)> AsmMatchValueStringArray =
+    {"==", "??", "xx", "<<", ">>"};
+
+static_assert(size_t(AsmMatchValueEx::Count) == 5, "Adjust array if this length has changed.");
+static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[1].size(), "Expects same length");
+static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[2].size(), "Expects same length");
+static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[3].size(), "Expects same length");
+static_assert(AsmMatchValueStringArray[0].size() == AsmMatchValueStringArray[4].size(), "Expects same length");
+
+using AsmMismatchReason = uint16_t;
+enum AsmMismatchReason_ : AsmMismatchReason
+{
+    AsmMismatchReason_JumpLen = 1 << 0, // Jump length is different.
+    AsmMismatchReason_MissingLeft = 1 << 1, // Instruction is missing on the left side.
+    AsmMismatchReason_MissingRight = 1 << 2, // Instruction is missing on the right side.
+    AsmMismatchReason_Missing = AsmMismatchReason_MissingLeft | AsmMismatchReason_MissingRight,
+    AsmMismatchReason_InvalidLeft = 1 << 3, // Instruction is invalid on the left side.
+    AsmMismatchReason_InvalidRight = 1 << 4, // Instruction is invalid on the right side.
+    AsmMismatchReason_Invalid = AsmMismatchReason_InvalidLeft | AsmMismatchReason_InvalidRight,
 };
 
 struct AsmMismatchInfo
 {
-    enum MismatchReason : uint16_t
-    {
-        MismatchReason_Missing = 1 << 0, // Instruction is missing on one side.
-        MismatchReason_Invalid = 1 << 1, // Instruction is invalid on one side.
-        MismatchReason_JumpLen = 1 << 2, // Jump length is different.
-    };
-
     AsmMatchValue get_match_value(AsmMatchStrictness strictness) const;
+    AsmMatchValueEx get_match_value_ex(AsmMatchStrictness strictness) const;
 
     bool is_match() const;
     bool is_mismatch() const;
@@ -52,27 +104,27 @@ struct AsmMismatchInfo
     bool is_maybe_match() const;
     bool is_maybe_mismatch() const;
 
-    uint16_t mismatch_bits = 0; // Bits representing positions where instructions are mismatching.
-    uint16_t maybe_mismatch_bits = 0; // Bits representing positions where instructions are maybe mismatching.
-    uint16_t mismatch_reasons = 0;
+    uint16_t mismatch_bits = 0; // Bit positions where instructions are mismatching. Mutually exclusive.
+    uint16_t maybe_mismatch_bits = 0; // Bit positions where instructions are maybe mismatching. Mutually exclusive.
+    AsmMismatchReason mismatch_reasons = 0;
 };
 static_assert(sizeof(AsmMismatchInfo) <= 8);
 
-struct AsmLabelPair
+struct AsmComparisonRecord
 {
-    std::array<const AsmLabel *, 2> pair; // A pointer can be null.
-};
+    uint8_t is_symbol() const;
 
-struct AsmInstructionPair
-{
-    std::array<const AsmInstruction *, 2> pair = {}; // A pointer can be null.
+    std::array<const AsmInstruction *, 2> pair = {}; // One pointer can be null.
     AsmMismatchInfo mismatch_info;
 };
 
-using AsmComparisonRecord = std::variant<AsmLabelPair, AsmInstructionPair>;
 using AsmComparisonRecords = std::vector<AsmComparisonRecord>;
 
-AsmMatchStrictness to_asm_match_strictness(const char *str);
+std::optional<ptrdiff_t> get_record_distance(
+    const AsmComparisonRecords &records,
+    Side side,
+    Address64T address1,
+    Address64T address2);
 
 struct AsmComparisonResult
 {
@@ -93,7 +145,7 @@ struct AsmComparisonResult
     int8_t get_max_similarity_as_int(AsmMatchStrictness strictness) const;
 
     AsmComparisonRecords records;
-    uint32_t label_count = 0;
+    uint32_t symbol_count = 0; // Number of records that contain at least one symbol.
     uint32_t match_count = 0;
     uint32_t maybe_match_count = 0; // Alias maybe mismatch, could be a match or mismatch.
     uint32_t mismatch_count = 0;
@@ -104,24 +156,19 @@ struct NamedFunction
     using Id = uint32_t;
     static constexpr Id InvalidId = ~Id(0);
 
-    bool is_disassembled() const;
-    bool is_linked_to_source_file() const;
-    bool Has_loaded_source_file() const;
+    bool is_disassembled() const; // Is async compatible.
+    TriState is_linked_to_source_file() const; // Is async compatible.
 
     std::string name;
     Function function;
 
     Id id = InvalidId;
-
-    // Is set false if function could not be linked to a source file.
-    bool can_link_to_source_file = true;
-
-    // Is set true if a source file load request has succeeded.
-    // The lifetime of the source file is independent and therefore could become out of sync.
-    bool has_loaded_source_file = false;
+    bool isDisassembled = false;
+    TriState isLinkedToSourceFile = TriState::False;
 };
 using NamedFunctions = std::vector<NamedFunction>;
 using NamedFunctionPair = std::array<NamedFunction *, 2>;
+using ConstNamedFunctionPair = std::array<const NamedFunction *, 2>;
 using NamedFunctionsPair = std::array<NamedFunctions *, 2>;
 using ConstNamedFunctionsPair = std::array<const NamedFunctions *, 2>;
 
@@ -133,9 +180,7 @@ struct NamedFunctionMatchInfo
 };
 using NamedFunctionMatchInfos = std::vector<NamedFunctionMatchInfo>;
 
-/*
- * Pairs a function from 2 executables that can be matched.
- */
+// Pairs a function from 2 executables that can be matched.
 struct MatchedFunction
 {
     bool is_compared() const;
@@ -151,9 +196,18 @@ struct MatchedFunctionsData
     std::array<NamedFunctionMatchInfos, 2> namedFunctionMatchInfosArray;
 };
 
-/*
- * Groups function matches of the same compiland or source file together.
- */
+using BuildBundleFlags = uint8_t;
+enum BuildBundleFlags_ : BuildBundleFlags
+{
+    BuildMatchedFunctionIndices = 1 << 0,
+    BuildMatchedNamedFunctionIndices = 1 << 1,
+    BuildUnmatchedNamedFunctionIndices = 1 << 2,
+    BuildAllNamedFunctionIndices = 1 << 3,
+
+    BuildBundleFlagsAll = 255u,
+};
+
+// Groups function matches of the same compiland or source file together.
 struct NamedFunctionBundle
 {
     using Id = uint32_t;
@@ -167,6 +221,8 @@ struct NamedFunctionBundle
     std::vector<IndexT> allNamedFunctionIndices; // Links to NamedFunctions. Contains matched and unmatched ones.
 
     Id id = InvalidId;
+
+    BuildBundleFlags flags = 0;
 };
 using NamedFunctionBundles = std::vector<NamedFunctionBundle>;
 
@@ -179,25 +235,6 @@ enum class MatchBundleType
     Count
 };
 
-MatchBundleType to_match_bundle_type(const char *str);
-
-struct StringPair
-{
-    std::array<std::string, 2> pair;
-};
-
-inline ConstFunctionPair to_const_function_pair(ConstNamedFunctionsPair named_functions_pair, const MatchedFunction &matched)
-{
-    return ConstFunctionPair{
-        &named_functions_pair[0]->at(matched.named_idx_pair[0]).function,
-        &named_functions_pair[1]->at(matched.named_idx_pair[1]).function};
-}
-
-inline NamedFunctionPair to_named_function_pair(NamedFunctionsPair named_functions_pair, const MatchedFunction &matched)
-{
-    return NamedFunctionPair{
-        &named_functions_pair[0]->at(matched.named_idx_pair[0]),
-        &named_functions_pair[1]->at(matched.named_idx_pair[1])};
-}
+MatchBundleType to_match_bundle_type(std::string_view str);
 
 } // namespace unassemblize

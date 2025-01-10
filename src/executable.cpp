@@ -77,7 +77,7 @@ bool Executable::load(const std::string &exe_filename)
 
             // Naive split on whether section contains data or code... have entrypoint? Code, else data.
             // Needs to be refined by providing a config file with section types specified.
-            const uint64_t entrypoint = m_binary->entrypoint() - m_binary->imagebase();
+            const Address64T entrypoint = m_binary->entrypoint() - m_binary->imagebase();
             if (section.address < entrypoint && section.address + section.size >= entrypoint)
             {
                 section.type = ExeSectionType::Code;
@@ -174,7 +174,7 @@ const ExeSections &Executable::get_sections() const
     return m_sections;
 }
 
-const ExeSectionInfo *Executable::find_section(uint64_t address) const
+const ExeSectionInfo *Executable::find_section(Address64T address) const
 {
     for (const ExeSectionInfo &section : m_sections)
     {
@@ -213,36 +213,41 @@ const ExeSectionInfo *Executable::get_code_section() const
     return nullptr;
 }
 
-uint64_t Executable::image_base() const
+Address64T Executable::image_base() const
 {
     return m_imageData.imageBase;
 }
 
-uint64_t Executable::code_section_begin_from_image_base() const
+Address64T Executable::code_section_begin_from_image_base() const
 {
     const ExeSectionInfo *section = get_code_section();
     assert(section != nullptr);
     return section->address + m_imageData.imageBase;
 }
 
-uint64_t Executable::code_section_end_from_image_base() const
+Address64T Executable::code_section_end_from_image_base() const
 {
     const ExeSectionInfo *section = get_code_section();
     assert(section != nullptr);
     return section->address + section->size + m_imageData.imageBase;
 }
 
-uint64_t Executable::all_sections_begin_from_image_base() const
+Address64T Executable::all_sections_begin_from_image_base() const
 {
     return m_imageData.sectionsBegin + m_imageData.imageBase;
 }
 
-uint64_t Executable::all_sections_end_from_image_base() const
+Address64T Executable::all_sections_end_from_image_base() const
 {
     return m_imageData.sectionsEnd + m_imageData.imageBase;
 }
 
-const ExeSymbol *Executable::get_symbol(uint64_t address) const
+const ExeSymbols &Executable::get_symbols() const
+{
+    return m_symbols;
+}
+
+const ExeSymbol *Executable::get_symbol(Address64T address) const
 {
     Address64ToIndexMapT::const_iterator it = m_symbolAddressToIndexMap.find(address);
 
@@ -266,14 +271,9 @@ const ExeSymbol *Executable::get_symbol(const std::string &name) const
     return &m_symbols[pair.first->second];
 }
 
-const ExeSymbol *Executable::get_symbol_from_image_base(uint64_t address) const
+const ExeSymbol *Executable::get_symbol_from_image_base(Address64T address) const
 {
     return get_symbol(address - image_base());
-}
-
-const ExeSymbols &Executable::get_symbols() const
-{
-    return m_symbols;
 }
 
 void Executable::add_symbols(const ExeSymbols &symbols, bool overwrite)

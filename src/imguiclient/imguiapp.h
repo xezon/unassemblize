@@ -12,17 +12,25 @@
  */
 #pragma once
 
+#include "imguiapptypes.h"
+
 #include "utility/imgui_misc.h"
 #include "utility/imgui_text_filter.h"
-#include <imgui.h>
 
-#include "filecontentstorage.h"
+#include "programcomparisondescriptor.h"
+#include "programfiledescriptor.h"
+#include "programfilerevisiondescriptor.h"
+
 #include "runnerasync.h"
 
-#include <chrono>
-#include <optional>
+#include <unordered_set>
 
 struct CommandLineOptions;
+
+namespace BS
+{
+class thread_pool;
+}
 
 namespace unassemblize::gui
 {
@@ -37,364 +45,111 @@ class ImGuiApp
     // clang-format off
     static constexpr ImGuiTableFlags FileManagerInfoTableFlags =
         ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_Reorderable |
         ImGuiTableFlags_Hideable |
+        ImGuiTableFlags_NoSavedSettings |
         ImGuiTableFlags_ContextMenuInBody |
         ImGuiTableFlags_RowBg |
         ImGuiTableFlags_BordersOuter |
         ImGuiTableFlags_BordersV |
         ImGuiTableFlags_SizingFixedFit |
-        ImGuiTableFlags_NoHostExtendX |
         ImGuiTableFlags_ScrollX |
         ImGuiTableFlags_ScrollY;
+
+    static constexpr ImGuiTableFlags ComparisonSplitTableFlags =
+        ImGuiTableFlags_NoSavedSettings |
+        ImGuiTableFlags_SizingStretchSame |
+        ImGuiTableFlags_NoBordersInBody |
+        ImGuiTableFlags_NoPadOuterX;
+
+    static constexpr ImGuiTableFlags AssemblerTableFlags =
+        ImGuiTableFlags_Resizable |
+        ImGuiTableFlags_Reorderable |
+        ImGuiTableFlags_Hideable |
+        ImGuiTableFlags_NoSavedSettings |
+        ImGuiTableFlags_ContextMenuInBody |
+        ImGuiTableFlags_RowBg |
+        ImGuiTableFlags_BordersOuter |
+        ImGuiTableFlags_BordersV |
+        ImGuiTableFlags_SizingFixedFit |
+        ImGuiTableFlags_ScrollX;
+
+    static constexpr ImGuiTreeNodeFlags TreeNodeHeaderFlags =
+        ImGuiTreeNodeFlags_Framed |
+        ImGuiTreeNodeFlags_NoTreePushOnOpen |
+        ImGuiTreeNodeFlags_SpanAvailWidth;
     // clang-format on
 
-    static constexpr uint8_t GuiBuildBundleFlags = BuildMatchedFunctionIndices | BuildAllNamedFunctionIndices;
+    static constexpr BuildBundleFlags GuiBuildBundleFlags = BuildMatchedFunctionIndices | BuildAllNamedFunctionIndices;
+    static constexpr BuildBundleFlags GuiBuildSingleBundleFlags = GuiBuildBundleFlags | BuildUnmatchedNamedFunctionIndices;
     static constexpr ImU32 RedColor = IM_COL32(255, 0, 0, 255);
     static constexpr ImU32 GreenColor = IM_COL32(0, 255, 0, 255);
+    static constexpr ImU32 YellowColor = IM_COL32(255, 255, 0, 255);
+    static constexpr ImU32 BluePinkColor = IM_COL32(160, 0, 255, 255);
+    static constexpr ImU32 LightGrayColor = IM_COL32(0xA0, 0xA0, 0xA0, 0xFF);
+    static constexpr ImU32 MismatchBgColor = CreateColor(RedColor, 96);
+    static constexpr ImU32 MaybeMismatchBgColor = CreateColor(YellowColor, 96);
+    static constexpr ImVec2 StandardMinButtonSize = ImVec2(80, 0);
     static constexpr std::chrono::system_clock::time_point InvalidTimePoint = std::chrono::system_clock::time_point::min();
-    static constexpr uint32_t InvalidId = 0;
-
-    // Helper struct to keep track of items that are scheduled to be processed just once.
-    struct ProcessedState
-    {
-        void init(size_t maxItemsCount);
-        span<const IndexT> get_items_for_processing(span<const IndexT> indices);
-
-    private:
-        bool set_item_processed(IndexT index);
-        size_t get_processed_item_count() const;
-        span<const IndexT> get_processed_items(size_t begin, size_t end) const;
-
-        // Items that have been processed.
-        std::vector<IndexT> m_processedItems;
-        // Array of bits for all items to keep track of which ones have been processed.
-        std::unique_ptr<uint8_t[]> m_processedItemStates;
-    };
-
-    using ProgramFileId = uint32_t;
-    using ProgramFileRevisionId = uint32_t;
-    using ProgramComparisonId = uint32_t;
-
-    struct ProgramFileDescriptor;
-    struct ProgramFileRevisionDescriptor;
-    struct ProgramComparisonDescriptor;
-
-    using ProgramFileDescriptorPtr = std::unique_ptr<ProgramFileDescriptor>;
-    using ProgramFileRevisionDescriptorPtr = std::shared_ptr<ProgramFileRevisionDescriptor>;
-    using ProgramComparisonDescriptorPtr = std::unique_ptr<ProgramComparisonDescriptor>;
 
     using ProgramFileDescriptorPair = std::array<ProgramFileDescriptor *, 2>;
 
-    struct ProgramFileDescriptor
+    // Class to help draw the assembler table columns. The default column order is different on left and right panes.
+    class AssemblerTableColumnsDrawer
     {
-        ProgramFileDescriptor();
-        ~ProgramFileDescriptor();
+        using InstructionSource = std::variant<const AsmInstructions *, const AsmComparisonRecords *>;
+        using AddressSet = std::unordered_set<Address64T>;
 
-        bool has_active_command() const;
-        WorkQueueCommandId get_active_command_id() const;
+    public:
+        explicit AssemblerTableColumnsDrawer(
+            const NamedFunction &namedFunction,
+            const TextFileContent *fileContent,
+            const AsmInstructions &instructions);
 
-        bool can_load_exe() const;
-        bool can_load_pdb() const;
-        bool can_load() const;
-        bool can_save_exe_config() const;
-        bool can_save_pdb_config() const;
-        bool can_save_config() const;
+        explicit AssemblerTableColumnsDrawer(
+            const NamedFunction &namedFunction,
+            const TextFileContent *fileContent,
+            const AsmComparisonRecords &records,
+            Side side);
 
-        bool exe_loaded() const;
-        bool pdb_loaded() const;
+        static void SetupColumns(
+            const std::vector<AssemblerTableColumn> &columns,
+            const AssemblerTableColumnSettings &settings);
 
-        std::string evaluate_exe_filename() const;
-        std::string evaluate_exe_config_filename() const;
-        std::string evaluate_pdb_config_filename() const;
-
-        std::string create_short_exe_name() const;
-        std::string create_descriptor_name() const;
-        std::string create_descriptor_name_with_file_info() const;
-
-        ProgramFileRevisionId get_revision_id() const;
-
-        void create_new_revision_descriptor();
-
-        // Note: All members must be modified by UI thread only
-
-        const ProgramFileId m_id = InvalidId;
-
-        // Must be not editable when the WorkQueue thread works on this descriptor.
-        std::string m_exeFilename;
-        std::string m_exeConfigFilename = auto_str;
-        std::string m_pdbFilename;
-        std::string m_pdbConfigFilename = auto_str;
-
-        TextFilterDescriptor<const ExeSymbol *> m_exeSymbolsFilter = "exe_symbols_filter";
-        TextFilterDescriptor<const PdbSymbolInfo *> m_pdbSymbolsFilter = "pdb_symbols_filter";
-        TextFilterDescriptor<const PdbFunctionInfo *> m_pdbFunctionsFilter = "pdb_functions_filter";
-
-        ProgramFileRevisionDescriptorPtr m_revisionDescriptor;
+        void PrintAsmInstructionColumns(
+            const std::vector<AssemblerTableColumn> &columns,
+            const AsmInstruction &instruction,
+            const AsmMismatchInfo &mismatchInfo = {},
+            AsmMatchStrictness strictness = AsmMatchStrictness::Undecided);
 
     private:
-        static ProgramFileId s_id;
-    };
+        static void SetupColumn(AssemblerTableColumn column, bool defaultShow, float initWidth);
 
-    // Note: Pass down a shared pointer of the ProgramFileRevisionDescriptor when chaining async commands.
-    struct ProgramFileRevisionDescriptor
-    {
-        enum class WorkReason
-        {
-            Load,
-            SaveConfig,
-            BuildNamedFunctions,
-            DisassembleSelectedFunctions,
-            BuildSourceLinesForSelectedFunctions,
-            LoadSourceFilesForSelectedFunctions,
-        };
+        void PrintAsmInstructionColumn(
+            AssemblerTableColumn column,
+            const AsmInstruction &instruction,
+            const AsmMismatchInfo &mismatchInfo,
+            AsmMatchStrictness strictness);
 
-        ProgramFileRevisionDescriptor();
-        ~ProgramFileRevisionDescriptor();
+        void PrintAsmJumpLines(const AsmInstruction &instruction);
 
-        void invalidate_command_id();
-        bool has_active_command() const;
-        WorkQueueCommandId get_active_command_id() const;
+        std::optional<ptrdiff_t> GetDistance(Address64T address1, Address64T address2);
 
-        bool can_load_exe() const;
-        bool can_load_pdb() const;
-        bool can_save_exe_config() const;
-        bool can_save_pdb_config() const;
-
-        bool exe_loaded() const;
-        bool pdb_loaded() const;
-
-        bool named_functions_built() const;
-
-        std::string evaluate_exe_filename() const;
-        std::string evaluate_exe_config_filename() const;
-        std::string evaluate_pdb_config_filename() const;
-
-        std::string create_short_exe_name() const;
-        std::string create_descriptor_name() const;
-        std::string create_descriptor_name_with_file_info() const;
-
-        const ProgramFileRevisionId m_id = InvalidId;
-
-        // Has pending asynchronous command(s) running when not invalid.
-        WorkQueueCommandId m_activeCommandId = InvalidWorkQueueCommandId; // #TODO Make vector of chained id's?
-        WorkReason m_workReason = {};
-
-        // String copies of the file descriptor at the time of async command chain creation.
-        // These allows to evaluate async save load operations without a dependency to the file descriptor.
-        std::string m_exeFilenameCopy;
-        std::string m_exeConfigFilenameCopy;
-        std::string m_pdbFilenameCopy;
-        std::string m_pdbConfigFilenameCopy;
-
-        std::unique_ptr<Executable> m_executable;
-        std::unique_ptr<PdbReader> m_pdbReader;
-        std::string m_exeFilenameFromPdb;
-        std::string m_exeSaveConfigFilename;
-        std::string m_pdbSaveConfigFilename;
-
-        std::chrono::time_point<std::chrono::system_clock> m_exeLoadTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_exeSaveConfigTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_pdbLoadTimepoint = InvalidTimePoint;
-        std::chrono::time_point<std::chrono::system_clock> m_pdbSaveConfigTimepoint = InvalidTimePoint;
-
-        NamedFunctions m_namedFunctions;
-
-        // Stores named functions that have been async processed already. Links to NamedFunctions.
-        ProcessedState m_processedNamedFunctions;
-
-        FileContentStorage m_fileContentStrorage;
-
-        bool m_namedFunctionsBuilt = false;
+        void AddAsmJumpLine(ImVec2 screenPos, ptrdiff_t distance, bool cursorPosIsOrigin);
 
     private:
-        static ProgramFileRevisionId s_id;
-    };
+        const NamedFunction &m_namedFunction;
+        const TextFileContent *m_fileContent; // Can be null.
+        const InstructionSource m_instructionSource;
+        const Side m_side = LeftSide;
 
-    struct ProgramComparisonDescriptor
-    {
-        struct File
-        {
-            enum class WorkReason
-            {
-                BuildMatchedFunctions,
-                BuildCompilandBundles,
-                BuildSourceFileBundles,
-                BuildSingleBundle,
-                BuildComparisonRecordsForSelectedFunctions,
-            };
-
-            struct ListItemUiInfo
-            {
-                void update_info(
-                    const std::string &itemName,
-                    uint32_t itemId,
-                    bool hasMatchedFunction,
-                    std::optional<int8_t> similarity = std::nullopt);
-
-                std::string m_label;
-                std::optional<int8_t> m_similarity = std::nullopt;
-            };
-
-            struct NamedFunctionBundleUiInfo : public ListItemUiInfo
-            {
-            };
-
-            struct NamedFunctionUiInfo : public ListItemUiInfo
-            {
-            };
-
-            using ImGuiBundlesSelectionArray = std::array<ImGuiSelectionBasicStorage, size_t(MatchBundleType::Count)>;
-            using NamedFunctionBundleUiInfos = std::vector<NamedFunctionBundleUiInfo>;
-            using NamedFunctionUiInfos = std::vector<NamedFunctionUiInfo>;
-
-            File();
-
-            void prepare_rebuild();
-            void init();
-
-            void invalidate_command_id();
-            bool has_active_command() const;
-            WorkQueueCommandId get_active_command_id() const;
-
-            bool exe_loaded() const;
-            bool pdb_loaded() const;
-            bool named_functions_built() const;
-            bool bundles_ready() const; // Bundles can be used when this returns true.
-
-            bool is_matched_function(IndexT namedFunctionIndex) const;
-
-            MatchBundleType get_selected_bundle_type() const;
-            span<const NamedFunctionBundle> get_bundles(MatchBundleType type) const;
-            span<NamedFunctionBundleUiInfo> get_bundle_ui_infos(MatchBundleType type);
-            span<const NamedFunctionBundleUiInfo> get_bundle_ui_infos(MatchBundleType type) const;
-            ImGuiSelectionBasicStorage &get_bundles_selection(MatchBundleType type);
-            const NamedFunctionBundle &get_filtered_bundle(int index) const;
-            const NamedFunctionBundleUiInfo &get_filtered_bundle_ui_info(int index) const;
-
-            void on_bundles_changed();
-            void on_bundles_interaction();
-
-            void update_bundle_ui_infos(MatchBundleType type);
-            void update_selected_bundles();
-            void update_active_functions(); // Requires prior call to updated selected bundles.
-            void update_named_function_ui_infos(span<const IndexT> namedFunctionIndices);
-
-            span<const IndexT> get_active_named_function_indices() const;
-            const NamedFunction &get_filtered_named_function(int index) const;
-            const NamedFunctionMatchInfo &get_filtered_named_function_match_info(int index) const;
-            const NamedFunctionUiInfo &get_filtered_named_function_ui_info(int index) const;
-
-            void update_selected_named_functions();
-
-            // Selected file index in list box. Is not reset on rebuild.
-            // Does not necessarily link to current loaded file.
-            IndexT m_imguiSelectedFileIdx = 0;
-
-            // Selected bundle type in combo box. Is not reset on rebuild.
-            IndexT m_imguiSelectedBundleTypeIdx = 0;
-
-            // Functions list options. Is not reset on rebuild.
-            bool m_imguiShowMatchedFunctions = true;
-            bool m_imguiShowUnmatchedFunctions = true;
-
-            // Selected bundles in multi select box. Is not reset on rebuild.
-            ImGuiBundlesSelectionArray m_imguiBundlesSelectionArray;
-
-            // Selected functions in multi select box. Is not reset on rebuild.
-            ImGuiSelectionBasicStorage m_imguiFunctionsSelection;
-
-            TextFilterDescriptor<const NamedFunctionBundle *> m_bundlesFilter = "bundles_filter";
-            TextFilterDescriptor<IndexT> m_functionIndicesFilter = "functions_filter";
-
-            // Has pending asynchronous command(s) running when not invalid.
-            WorkQueueCommandId m_activeCommandId = InvalidWorkQueueCommandId; // #TODO Make vector of chained id's?
-            WorkReason m_workReason = {};
-
-            ProgramFileRevisionDescriptorPtr m_revisionDescriptor;
-
-            NamedFunctionMatchInfos m_namedFunctionMatchInfos;
-            NamedFunctionBundles m_compilandBundles;
-            NamedFunctionBundles m_sourceFileBundles;
-            NamedFunctionBundle m_singleBundle;
-
-            NamedFunctionUiInfos m_namedFunctionUiInfos;
-            NamedFunctionBundleUiInfos m_compilandBundleUiInfos;
-            NamedFunctionBundleUiInfos m_sourceFileBundleUiInfos;
-            NamedFunctionBundleUiInfo m_singleBundleUiInfo;
-
-            TriState m_compilandBundlesBuilt = TriState::False;
-            TriState m_sourceFileBundlesBuilt = TriState::False;
-            bool m_singleBundleBuilt = false;
-
-            // Bundles that are visible and selected in the ui.
-            std::vector<const NamedFunctionBundle *> m_selectedBundles;
-
-            // Named function indices that have been assembled from multiple bundles. Links to NamedFunctions.
-            std::vector<IndexT> m_activeNamedFunctionIndices;
-
-            // Functions that are visible and selected in the ui. Links to NamedFunctions.
-            std::vector<IndexT> m_selectedNamedFunctionIndices;
-        };
-
-        struct FunctionsSimilarityReport
-        {
-            bool has_result() const { return totalSimilarity.has_value(); }
-
-            std::optional<uint32_t> totalSimilarity = std::nullopt; // Accumulative similarity value of matched functions.
-        };
-
-        ProgramComparisonDescriptor();
-        ~ProgramComparisonDescriptor();
-
-        void prepare_rebuild();
-        void init();
-
-        bool has_active_command() const;
-
-        bool executables_loaded() const;
-        bool named_functions_built() const;
-        bool matched_functions_built() const;
-        bool bundles_ready() const;
-
-        // Call relevant File::update_selected_functions before this one.
-        void update_selected_matched_functions();
-
-        void update_all_bundle_ui_infos();
-
-        FunctionsSimilarityReport build_function_similarity_report(span<const IndexT> matchedFunctionIndices);
-
-        void update_matched_named_function_ui_infos(span<const IndexT> matchedFunctionIndices);
-
-        span<const IndexT> get_matched_named_function_indices_for_processing(IndexT side);
-
-        const ProgramComparisonId m_id = InvalidId;
-
-        int m_pendingBuildComparisonRecordsCommands = 0;
-
-        bool m_has_open_window = true;
-        bool m_matchedFunctionsBuilt = false;
-
-        std::array<File, 2> m_files;
-
-        MatchedFunctions m_matchedFunctions;
-
-        // Stores matched functions that have been async processed already. Links to MatchedFunctions.
-        ProcessedState m_processedMatchedFunctions;
-
-        // Matched Functions that are visible and selected in the ui. Links to MatchedFunctions.
-        std::vector<IndexT> m_selectedMatchedFunctionIndices;
-
-    private:
-        static std::vector<IndexT> build_named_function_indices(
-            const MatchedFunctions &matchedFunctions,
-            span<const IndexT> matchedFunctionIndices,
-            IndexT side);
-
-        static ProgramFileId s_id;
+        // Addresses that have their jumps currently drawn.
+        // Since lists use the ImGui clipper, not all jumps are drawn at the same time.
+        std::unordered_set<Address64T> m_drawnJumpOrigins;
     };
 
 public:
-    ImGuiApp();
+    explicit ImGuiApp(BS::thread_pool *threadPool = nullptr);
     ~ImGuiApp();
 
     ImGuiStatus init(const CommandLineOptions &clo);
@@ -404,14 +159,14 @@ public:
     bool can_shutdown() const; // Signals that this app can shutdown.
     void shutdown();
 
-    void set_window_pos(ImVec2 pos) { m_windowPos = pos; }
-    void set_window_size(ImVec2 size) { m_windowSize = size; }
     ImGuiStatus update();
 
     const ImVec4 &get_clear_color() const { return m_clearColor; }
 
 private:
     void update_app();
+
+    // Begin Command Functions
 
     static WorkQueueCommandPtr create_load_command(ProgramFileRevisionDescriptorPtr &revisionDescriptor);
     static WorkQueueCommandPtr create_load_exe_command(ProgramFileRevisionDescriptorPtr &revisionDescriptor);
@@ -449,7 +204,9 @@ private:
         ProgramComparisonDescriptor *comparisonDescriptor,
         span<const IndexT> matchedFunctionIndices);
 
-    ProgramFileDescriptor *get_program_file_descriptor(size_t program_file_idx);
+    // End Command Functions
+
+    // Begin Asynchronous Functions
 
     void load_async(ProgramFileDescriptor *descriptor);
 
@@ -466,23 +223,38 @@ private:
     void process_named_functions_async(
         ProgramFileRevisionDescriptorPtr &revisionDescriptor,
         span<const IndexT> namedFunctionIndices);
-
+    void process_matched_functions_async(
+        ProgramComparisonDescriptor *comparisonDescriptor,
+        span<const IndexT> matchedFunctionIndices);
     void process_named_and_matched_functions_async(
         ProgramComparisonDescriptor *comparisonDescriptor,
         span<const IndexT> matchedFunctionIndices);
 
-    void process_matched_functions_async(
-        ProgramComparisonDescriptor *comparisonDescriptor,
+    void process_leftover_named_and_matched_functions_async(
+        ProgramComparisonDescriptor &descriptor,
         span<const IndexT> matchedFunctionIndices);
+    void process_leftover_named_functions_async(
+        ProgramFileRevisionDescriptorPtr &descriptor,
+        span<const IndexT> namedFunctionIndices);
+
+    void process_all_leftover_named_and_matched_functions_async(ProgramComparisonDescriptor &descriptor);
+    void process_all_leftover_named_functions_async(ProgramComparisonDescriptor &descriptor);
+
+    // End Asynchronous Functions.
 
     void add_file();
-    void remove_file(size_t idx);
+    void remove_file(size_t index);
     void remove_all_files();
+    ProgramFileDescriptor *get_program_file_descriptor(size_t index);
 
     void add_program_comparison();
     void update_closed_program_comparisons();
 
+    void update_bundles_interaction(ProgramComparisonDescriptor::File &file);
+    void update_functions_interaction(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
     void on_functions_interaction(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
+    void on_process_matched_functions_interaction(ProgramComparisonDescriptor &descriptor);
+    void on_process_unmatched_functions_interaction(ProgramComparisonDescriptor &descriptor);
 
     static std::string create_section_string(uint32_t section_index, const ExeSections *sections);
     static std::string create_time_string(std::chrono::time_point<std::chrono::system_clock> time_point);
@@ -492,6 +264,7 @@ private:
     void OutputManagerWindow(bool *p_open);
     void ComparisonManagerWindows();
 
+    void FileManagerMenu();
     void FileManagerBody();
     void FileManagerDescriptor(ProgramFileDescriptor &descriptor, bool &erased);
     void FileManagerDescriptorExeFile(ProgramFileDescriptor &descriptor);
@@ -499,10 +272,12 @@ private:
     void FileManagerDescriptorPdbFile(ProgramFileDescriptor &descriptor);
     void FileManagerDescriptorPdbConfig(ProgramFileDescriptor &descriptor);
     void FileManagerDescriptorActions(ProgramFileDescriptor &descriptor, bool &erased);
+    void FileManagerDescriptorProgressOverlay(const ProgramFileDescriptor &descriptor, const ImRect &rect);
     void FileManagerDescriptorSaveLoadStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerDescriptorLoadStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerDescriptorSaveStatus(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerGlobalButtons();
+    void FileManagerInfoNode(ProgramFileDescriptor &fileDescriptor, const ProgramFileRevisionDescriptor &revisionDescriptor);
     void FileManagerInfo(ProgramFileDescriptor &fileDescriptor, const ProgramFileRevisionDescriptor &revisionDescriptor);
     void FileManagerInfoExeSections(const ProgramFileRevisionDescriptor &descriptor);
     void FileManagerInfoExeSymbols(
@@ -520,15 +295,98 @@ private:
 
     void OutputManagerBody();
 
+    void ComparisonManagerSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerMatchStrictnessSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerAssemblerTableColumnSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerMenu(ProgramComparisonDescriptor &descriptor);
     void ComparisonManagerBody(ProgramComparisonDescriptor &descriptor);
-    void ComparisonManagerProgramFileSelection(ProgramComparisonDescriptor::File &file);
-    void ComparisonManagerItemListStyleColor(
+    void ComparisonManagerFilesHeaders();
+    void ComparisonManagerFilesLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesList(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFilesActions1(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesActions2(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesCompareButton(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesProcessFunctionsCheckbox(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFilesProgressOverlay(const ProgramComparisonDescriptor &descriptor, const ImRect &rect);
+    void ComparisonManagerFilesStatus(const ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesTypeSelection(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerBundlesFilter(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerBundlesLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerBundlesList(ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFunctionsSettings(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFunctionsFilter(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
+    void ComparisonManagerFunctionsLists(ProgramComparisonDescriptor &descriptor);
+    void ComparisonManagerFunctionsList(ProgramComparisonDescriptor &descriptor, ProgramComparisonDescriptor::File &file);
+
+    static void ComparisonManagerFunctionEntries(ProgramComparisonDescriptor &descriptor);
+    static void ComparisonManagerFunctionEntriesControls(ProgramComparisonDescriptor &descriptor);
+
+    static void ComparisonManagerMatchedFunctions(
+        const ProgramComparisonDescriptor &descriptor,
+        span<const IndexT> matchedFunctionIndices);
+    static void ComparisonManagerMatchedFunctionSummary(
+        const ProgramComparisonDescriptor &descriptor,
+        const MatchedFunction &matchedFunction);
+    static void ComparisonManagerMatchedFunction(
+        const ProgramComparisonDescriptor &descriptor,
+        const MatchedFunction &matchedFunction);
+    static void ComparisonManagerMatchedFunctionContentTable(
+        const ProgramComparisonDescriptor &descriptor,
+        Side side,
+        const AsmComparisonRecords &records,
+        const NamedFunction &namedFunction);
+
+    static void ComparisonManagerNamedFunctions(
+        const ProgramComparisonDescriptor &descriptor,
+        Side side,
+        span<const IndexT> namedFunctionIndices);
+    static void ComparisonManagerNamedFunction(
+        Side side,
+        const ProgramFileRevisionDescriptor &fileRevision,
+        const NamedFunction &namedFunction,
+        const AssemblerTableColumnSettings &columnSettings);
+    static void ComparisonManagerNamedFunctionContentTable(
+        Side side,
+        const ProgramFileRevisionDescriptor &fileRevision,
+        const NamedFunction &namedFunction,
+        const AssemblerTableColumnSettings &columnSettings);
+
+    static bool PrintAsmInstructionSourceLine(const AsmInstruction &instruction, const TextFileContent &fileContent);
+    static bool PrintAsmInstructionSourceCode(const AsmInstruction &instruction, const TextFileContent &fileContent);
+    static void PrintAsmInstructionBytes(const AsmInstruction &instruction);
+    static void PrintAsmInstructionAddress(const AsmInstruction &instruction);
+    static void PrintAsmInstructionAssembler(
+        const AsmInstruction &instruction,
+        const AsmMismatchInfo &mismatchInfo,
+        AsmMatchStrictness strictness);
+
+    static void ComparisonManagerMatchedFunctionDiffSymbolTable(
+        const AsmComparisonRecords &records,
+        AsmMatchStrictness strictness);
+
+    static void ComparisonManagerItemListStyleColor(
         ScopedStyleColor &styleColor,
-        const ProgramComparisonDescriptor::File::ListItemUiInfo &uiInfo);
+        const ProgramComparisonDescriptor::File::ListItemUiInfo &uiInfo,
+        float offsetX = 0.0f);
+
+    static bool Button(const char *label, ImGuiButtonFlags flags = 0);
+    static bool FileDialogButton(
+        const char *button_label,
+        std::string *file_path_name,
+        const std::string &key,
+        const std::string &title,
+        const char *filters);
+    static bool TreeNodeHeader(const char *label, ImGuiTreeNodeFlags flags = 0);
+    static bool TreeNodeHeader(const char *str_id, ImGuiTreeNodeFlags flags, const char *fmt, ...) IM_FMTARGS(3);
+    static void TreeNodeHeaderStyleColor(ScopedStyleColor &styleColor);
+
+    static const std::vector<AssemblerTableColumn> &GetAssemblerTableColumns(Side side, bool showSourceCodeColumns);
+
+    static ImU32 GetAsmMatchValueColor(AsmMatchValueEx matchValue);
+    static ImU32 GetMismatchBitColor(const AsmMismatchInfo &mismatchInfo, AsmMatchStrictness strictness, int bit);
 
 private:
-    ImVec2 m_windowPos = ImVec2(0, 0);
-    ImVec2 m_windowSize = ImVec2(0, 0);
     ImVec4 m_clearColor = ImVec4(0.0f, 0.0f, 0.0f, 1.00f);
 
     bool m_showDemoWindow = true;
@@ -542,12 +400,19 @@ private:
     bool m_showFileManagerPdbFunctionInfo = true;
     bool m_showFileManagerPdbExeInfo = true;
 
-    bool m_showOutputManager = true;
+    bool m_showOutputManager = false;
 
     WorkQueue m_workQueue;
 
     std::vector<ProgramFileDescriptorPtr> m_programFiles;
     std::vector<ProgramComparisonDescriptorPtr> m_programComparisons;
+
+    static std::string s_textBuffer1024;
+
+    static const std::vector<AssemblerTableColumn> s_assemblerTableColumnsLeft;
+    static const std::vector<AssemblerTableColumn> s_assemblerTableColumnsRight;
+    static const std::vector<AssemblerTableColumn> s_assemblerTableColumnsLeft_NoSource;
+    static const std::vector<AssemblerTableColumn> s_assemblerTableColumnsRight_NoSource;
 };
 
 } // namespace unassemblize::gui

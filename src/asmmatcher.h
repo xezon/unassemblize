@@ -18,13 +18,11 @@ namespace unassemblize
 {
 class AsmMatcher
 {
-    using InstructionTextArray = SizedArray<std::string, size_t, 4>;
     using InstructionTextArrays = std::vector<InstructionTextArray>;
 
     struct LookaheadResult
     {
         AsmMismatchInfo mismatch_info;
-        bool is_label = false; // The lookahead has hit a label.
         bool is_matching = false; // The lookahead is considered a match. It could be a maybe match.
     };
 
@@ -37,21 +35,17 @@ class AsmMatcher
     };
 
 public:
-    /*
-     * Runs a comparison on the given FunctionMatch.
-     * The returned result will retain a dependency on that FunctionMatch object.
-     */
+    // Runs a comparison on the given FunctionMatch.
+    // The returned result will retain a dependency on that FunctionMatch object.
     static AsmComparisonResult run_comparison(ConstFunctionPair function_pair, uint32_t lookahead_limit);
 
 private:
-    /*
-     * Looks ahead one side of the instruction list and compares
-     * its last instruction with the base instruction of the opposite side.
-     */
+    // Looks ahead one side of the instruction list and compares
+    // its last instruction with the base instruction of the opposite side.
     static LookaheadResult run_lookahead_comparison(
-        size_t lookahead_side,
-        AsmInstructionVariants::const_iterator lookahead_base_it,
-        AsmInstructionVariants::const_iterator lookahead_last_it,
+        Side lookahead_side,
+        AsmInstructions::const_iterator lookahead_base_it,
+        AsmInstructions::const_iterator lookahead_last_it,
         const InstructionTextArray &lookahead_last_array,
         const AsmInstruction &opposite_base_instruction,
         const InstructionTextArray &opposite_base_array,
@@ -65,19 +59,12 @@ private:
         const InstructionTextArray *array1 = nullptr);
 
     static bool has_jump_len_mismatch(const AsmInstruction &instruction0, const AsmInstruction &instruction1);
-    static AsmMismatchInfo compare_asm_text(const std::string &text0, const std::string &text1);
+    static AsmMismatchInfo compare_asm_text(std::string_view text0, std::string_view text1);
     static AsmMismatchInfo compare_asm_text(const InstructionTextArray &array0, const InstructionTextArray &array1);
     static SkipSymbolResult skip_unknown_symbol(const char *str);
     static const char *skip_known_symbol(const char *str);
 
-    /*
-     * Splits instruction text string to text array.
-     * "mov dword ptr[eax], 0x10" becomes {"mov", "dword ptr[eax]", "0x10"}
-     */
-    static InstructionTextArrays split_instruction_texts(const AsmInstructionVariants &instructions);
-    static InstructionTextArray split_instruction_text(const std::string &text);
-
-    static AsmInstructionVariant s_nullInstructionVariant;
+    static InstructionTextArrays split_instruction_texts(const AsmInstructions &instructions);
 };
 
 } // namespace unassemblize

@@ -1099,14 +1099,14 @@ bool PdbReader::add_or_update_symbol(PdbSymbolInfo &&symbolInfo)
     }
     else
     {
-        /* This update can hit in two ways:
-         *
-         * 1) a public symbol is also a global symbol
-         *
-         * 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
-         *    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
-         *    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
-         */
+        // This update can hit in two ways:
+        //
+        // 1) a public symbol is also a global symbol
+        //
+        // 2) a symbol, such as an overloaded virtual destructor, has more than 1 symbol for its address:
+        //    ??_EArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`vector deleting destructor'...
+        //    ??_GArmorStore@@UAEPAXI@Z  public: virtual void * __thiscall ArmorStore::`scalar deleting destructor'...
+
         PdbSymbolInfo &curSymbolInfo = m_symbols[it->second];
 
         if (symbolInfo.address.absVirtual != ~Address64T(0))

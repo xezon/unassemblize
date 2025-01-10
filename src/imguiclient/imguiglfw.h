@@ -17,16 +17,20 @@
 
 struct GLFWwindow;
 
+namespace BS
+{
+class thread_pool;
+}
+
 namespace unassemblize::gui
 {
-
 class ImGuiGLFW
 {
 public:
     ImGuiGLFW();
     ~ImGuiGLFW();
 
-    ImGuiStatus run(const CommandLineOptions& clo);
+    ImGuiStatus run(const CommandLineOptions &clo, BS::thread_pool *threadPool = nullptr);
 
 private:
     bool init();
@@ -35,7 +39,7 @@ private:
     void render();
     void updateDisplayScale();
 
-    GLFWwindow* m_window;
+    GLFWwindow *m_window;
     std::unique_ptr<ImGuiApp> m_app;
     bool m_initialized;
     float m_dpiScale;

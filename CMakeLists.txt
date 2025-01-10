@@ -123,6 +123,14 @@ FetchContent_Declare(readerwriterqueue
 )
 FetchContent_MakeAvailable(readerwriterqueue)
 
+FetchContent_Declare(
+    bs_thread_pool
+    GIT_REPOSITORY https://github.com/bshoshany/thread-pool.git
+    GIT_TAG        v4.1.0
+    SOURCE_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/BS_thread_pool
+)
+FetchContent_MakeAvailable(bs_thread_pool)
+
 # TODO: Can we use FetchContent_MakeAvailable without getting the test suite for it?
 FetchContent_Populate(span DOWNLOAD_EXTRACT_TIMESTAMP
     GIT_REPOSITORY https://github.com/xezon/span
@@ -183,13 +191,27 @@ target_sources(unassemblize PRIVATE
     src/version.h
     src/workqueue.cpp
     src/workqueue.h
+    src/imguiclient/asyncworkstate.h
     src/imguiclient/imguiapp.cpp
     src/imguiclient/imguiapp.h
+    src/imguiclient/imguiapptypes.h
+    src/imguiclient/imguicore.h
+    src/imguiclient/processedstate.cpp
+    src/imguiclient/processedstate.h
+    src/imguiclient/programcomparisondescriptor.cpp
+    src/imguiclient/programcomparisondescriptor.h
+    src/imguiclient/programfilecommon.h
+    src/imguiclient/programfiledescriptor.cpp
+    src/imguiclient/programfiledescriptor.h
+    src/imguiclient/programfilerevisiondescriptor.cpp
+    src/imguiclient/programfilerevisiondescriptor.h
     src/imguiclient/utility/imgui_misc.cpp
     src/imguiclient/utility/imgui_misc.h
     src/imguiclient/utility/imgui_scoped.h
     src/imguiclient/utility/imgui_text_filter.cpp
     src/imguiclient/utility/imgui_text_filter.h
+    src/util/bitarray.h
+    src/util/nocopy.h
 )
 
 # Platform-specific configurations
@@ -246,6 +268,7 @@ target_link_libraries(unassemblize PRIVATE
 target_include_directories(unassemblize PRIVATE
     .
     src
+    3rdparty/BS_thread_pool/include
     3rdparty/span/include
 )
 

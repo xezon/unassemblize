@@ -12,6 +12,7 @@
  */
 #include "imguiwin32.h"
 #include "imguiapp.h"
+#include "imguicore.h"
 
 // Dear ImGui: standalone example application for DirectX 9
 // Learn about Dear ImGui:
@@ -19,12 +20,11 @@
 // - Getting Started      https://dearimgui.com/getting-started
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
-#include "imgui.h"
-#include "imgui_impl_dx9.h"
-#include "imgui_impl_win32.h"
 #include "util.h"
 #include "version.h"
 #include <d3d9.h>
+#include <imgui_impl_dx9.h>
+#include <imgui_impl_win32.h>
 #include <tchar.h>
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -41,7 +41,6 @@ static UINT g_ResizeHeight = 0;
 static D3DPRESENT_PARAMETERS g_d3dpp = {};
 
 // Forward declarations of helper functions
-void GetNativeWindowClientArea(HWND hwnd, ImVec2 &pos, ImVec2 &size);
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
 void ResetDevice();
@@ -55,7 +54,7 @@ ImGuiWin32::~ImGuiWin32()
 {
 }
 
-ImGuiStatus ImGuiWin32::run(const CommandLineOptions &clo)
+ImGuiStatus ImGuiWin32::run(const CommandLineOptions &clo, BS::thread_pool *threadPool)
 {
     // Create application window
     // ImGui_ImplWin32_EnableDpiAwareness();
@@ -107,7 +106,7 @@ ImGuiStatus ImGuiWin32::run(const CommandLineOptions &clo)
     ::ShowWindow(hwnd, SW_MAXIMIZE);
     ::UpdateWindow(hwnd);
 
-    m_app.reset(new ImGuiApp);
+    m_app = std::make_unique<ImGuiApp>(threadPool);
 
     {
         const ImGuiStatus error = m_app->init(clo);
@@ -165,10 +164,6 @@ ImGuiStatus ImGuiWin32::run(const CommandLineOptions &clo)
         ImGui_ImplWin32_NewFrame();
 
         {
-            ImVec2 pos, size;
-            GetNativeWindowClientArea(hwnd, pos, size);
-            m_app->set_window_pos(pos);
-            m_app->set_window_size(size);
             const ImGuiStatus error = m_app->update();
             if (error != ImGuiStatus::Ok)
                 return error;
@@ -218,22 +213,6 @@ ImGuiStatus ImGuiWin32::run(const CommandLineOptions &clo)
 }
 
 // Helper functions
-void GetNativeWindowClientArea(HWND hwnd, ImVec2 &pos, ImVec2 &size)
-{
-    RECT clientRect;
-    POINT topLeft = {0, 0};
-
-    // Get the client area size
-    if (::GetClientRect(hwnd, &clientRect))
-    {
-        size = ImVec2((float)(clientRect.right - clientRect.left), (float)(clientRect.bottom - clientRect.top));
-    }
-
-    // Convert the top-left corner of the client area to screen coordinates
-    ::ClientToScreen(hwnd, &topLeft);
-    pos = ImVec2((float)topLeft.x, (float)topLeft.y);
-}
-
 bool CreateDeviceD3D(HWND hWnd)
 {
     if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == nullptr)

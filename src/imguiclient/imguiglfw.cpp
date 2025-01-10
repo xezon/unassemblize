@@ -10,6 +10,7 @@
  *            A full copy of the GNU General Public License can be found in
  *            LICENSE
  */
+#include "imguicore.h"
 
 #ifdef __APPLE__
 #define GLFW_INCLUDE_NONE // Prevent GLFW from including gl.h
@@ -25,11 +26,9 @@
 #include "imguiglfw.h"
 #include "version.h"
 #include <GLFW/glfw3.h>
-#include <imgui.h>
 
 namespace unassemblize::gui
 {
-
 static void glfw_error_callback(int error, const char *description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
@@ -125,10 +124,6 @@ bool ImGuiGLFW::init()
 
     // Configure ImGui
     ImGuiIO &io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
 #ifdef __APPLE__
     io.ConfigMacOSXBehaviors = true;
 #endif
@@ -203,14 +198,6 @@ bool ImGuiGLFW::update()
         glfwWaitEventsTimeout(0.1);
         return true;
     }
-
-    // Get window info
-    int window_x, window_y;
-    glfwGetWindowPos(m_window, &window_x, &window_y);
-    int width, height;
-    glfwGetFramebufferSize(m_window, &width, &height);
-    m_app->set_window_pos(ImVec2(static_cast<float>(window_x), static_cast<float>(window_y)));
-    m_app->set_window_size(ImVec2(static_cast<float>(width), static_cast<float>(height)));
 
     // Start backend frames
     ImGui_ImplOpenGL3_NewFrame();
@@ -311,7 +298,7 @@ void ImGuiGLFW::updateDisplayScale()
     }
 }
 
-ImGuiStatus ImGuiGLFW::run(const CommandLineOptions &clo)
+ImGuiStatus ImGuiGLFW::run(const CommandLineOptions &clo, BS::thread_pool *threadPool)
 {
     if (!init())
     {
@@ -320,7 +307,7 @@ ImGuiStatus ImGuiGLFW::run(const CommandLineOptions &clo)
     }
 
     // Initialize the app after ImGui is fully set up
-    m_app = std::make_unique<ImGuiApp>();
+    m_app = std::make_unique<ImGuiApp>(threadPool);
 
     if (m_app->init(clo) != ImGuiStatus::Ok)
     {

@@ -18,7 +18,7 @@
 
 // When output is set to "auto", then output name is chosen for input file name.
 inline constexpr char *const auto_str = "auto";
-bool is_auto_str(const std::string &str);
+bool is_auto_str(std::string_view str);
 
 enum class InputType
 {
@@ -29,14 +29,14 @@ enum class InputType
 
 inline constexpr char *const s_input_type_names[] = {"exe", "pdb", "none"};
 
-std::string get_config_file_name(const std::string &input_file, const std::string &config_file);
-std::string get_asm_output_file_name(const std::string &input_file, const std::string &output_file);
+std::string get_config_file_name(std::string_view input_file, std::string_view config_file);
+std::string get_asm_output_file_name(std::string_view input_file, std::string_view output_file);
 std::string get_cmp_output_file_name(
-    const std::string &input_file0,
-    const std::string &input_file1,
-    const std::string &output_file);
-InputType to_input_type(const char *str);
-InputType get_input_type(const std::string &input_file, const std::string &input_type);
+    std::string_view input_file0,
+    std::string_view input_file1,
+    std::string_view output_file);
+InputType to_input_type(std::string_view str);
+InputType get_input_type(std::string_view input_file, std::string_view input_type);
 
 template<typename T>
 struct CommandLineType

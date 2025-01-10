@@ -14,12 +14,19 @@
 
 #include "runneroptions.h"
 
+namespace BS
+{
+class thread_pool;
+}
+
 namespace unassemblize
 {
 class Runner
 {
 public:
     Runner() = delete;
+
+    static void set_thread_pool(BS::thread_pool *threadPool);
 
     static std::unique_ptr<Executable> load_exe(const LoadExeOptions &o);
     static std::unique_ptr<PdbReader> load_pdb(const LoadPdbOptions &o);
@@ -84,28 +91,28 @@ private:
         const PdbReader *bundling_pdb_reader,
         MatchBundleType bundle_type,
         size_t bundle_file_idx,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     // Note: requires a prior call to build_matched_functions!
     static NamedFunctionBundles build_bundles_from_compilands(
         const NamedFunctions &named_functions,
         const NamedFunctionMatchInfos &named_functions_match_infos,
         const PdbReader &pdb_reader,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     // Note: requires a prior call to build_matched_functions!
     static NamedFunctionBundles build_bundles_from_source_files(
         const NamedFunctions &named_functions,
         const NamedFunctionMatchInfos &named_functions_match_infos,
         const PdbReader &pdb_reader,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     // Creates a single bundle with all functions.
     static NamedFunctionBundle build_single_bundle(
         const NamedFunctionMatchInfos &named_functions_match_infos,
         const MatchedFunctions &matched_functions,
         size_t bundle_file_idx,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     template<class SourceInfoVectorT>
     static NamedFunctionBundles build_bundles(
@@ -113,7 +120,7 @@ private:
         const PdbFunctionInfoVector &functions,
         const NamedFunctions &named_functions,
         const NamedFunctionMatchInfos &named_functions_match_infos,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     template<class SourceInfoVectorT>
     static NamedFunctionBundle build_bundle(
@@ -122,9 +129,13 @@ private:
         const PdbFunctionInfoVector &functions,
         const NamedFunctionMatchInfos &named_functions_match_infos,
         const Address64ToIndexMapT &named_function_to_index_map,
-        uint8_t flags);
+        BuildBundleFlags flags);
 
     static void disassemble_function(NamedFunction &named, const FunctionSetup &setup);
+    static void disassemble_matched_function(
+        NamedFunctionsPair named_functions_pair,
+        const MatchedFunction &matched,
+        std::array<const FunctionSetup *, 2> setup_pair);
 
     static void disassemble_matched_functions(
         NamedFunctionsPair named_functions_pair,
@@ -159,18 +170,22 @@ private:
     static void build_source_lines_for_functions(span<NamedFunction> named_functions, const PdbReader &pdb_reader);
 
     // Note: requires a prior call to build_source_lines_for_functions!
-    static bool load_source_file_for_function(FileContentStorage &storage, NamedFunction &named);
+    static bool load_source_file_for_function(FileContentStorage &storage, const NamedFunction &named);
+    static bool load_source_files_for_matched_function(
+        FileContentStorage &storage,
+        ConstNamedFunctionsPair named_functions_pair,
+        const MatchedFunction &matched);
 
     // Note: requires a prior call to build_source_lines_for_functions!
     static bool load_source_files_for_matched_functions(
         FileContentStorage &storage,
-        NamedFunctionsPair named_functions_pair,
+        ConstNamedFunctionsPair named_functions_pair,
         const MatchedFunctions &matched_functions);
 
     // Note: requires a prior call to build_source_lines_for_functions!
     static bool load_source_files_for_selected_functions(
         FileContentStorage &storage,
-        NamedFunctions &named_functions,
+        const NamedFunctions &named_functions,
         span<const IndexT> named_function_indices);
 
     // Note: requires a prior call to build_source_lines_for_functions!
@@ -197,20 +212,15 @@ private:
         const MatchedFunctions &matched_functions,
         const NamedFunctionBundles &bundles,
         const FileContentStorage &source_file_storage,
-        MatchBundleType bundle_type,
-        const std::string &output_file,
-        const StringPair &exe_filenames,
-        AsmMatchStrictness match_strictness,
-        uint32_t indent_len,
-        uint32_t asm_len,
-        uint32_t byte_count,
-        uint32_t sourcecode_len,
-        uint32_t sourceline_len);
+        const AsmComparisonOptions &o);
 
     static std::string build_cmp_output_path(
         size_t bundle_idx,
         const std::string &bundle_name,
         const std::string &output_file);
+
+private:
+    static BS::thread_pool *s_threadPool;
 };
 
 } // namespace unassemblize
