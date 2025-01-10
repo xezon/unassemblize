@@ -15,6 +15,9 @@
 
 namespace unassemblize
 {
+// #TODO: Verify and improve error handling when a json field does not exist.
+// Currently js.at("") should crash if that named field does not exit.
+
 void to_json(nlohmann::json &js, const PdbAddress &d)
 {
     js = nlohmann::json{

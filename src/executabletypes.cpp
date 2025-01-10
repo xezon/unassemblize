@@ -48,6 +48,9 @@ const char *to_string(ExeSectionType type)
     static_assert(size_t(ExeSectionType::Unknown) == 2, "Enum was changed. Update switch case.");
 }
 
+// #TODO: Verify and improve error handling when a json field does not exist.
+// Currently js.at("") should crash if that named field does not exit.
+
 void to_json(nlohmann::json &js, const ExeSymbol &d)
 {
     js = nlohmann::json{{"name", d.name}, {"address", d.address}, {"size", d.size}};

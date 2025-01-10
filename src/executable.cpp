@@ -299,8 +299,9 @@ void Executable::add_symbols(const PdbSymbolInfoVector &symbols, bool overwrite)
 
 void Executable::add_symbol(const ExeSymbol &symbol, bool overwrite)
 {
-    // Skip invalid symbols (empty name or zero address)
-    if (symbol.address == 0 || symbol.name.empty())
+    if (symbol.address == 0)
+        return;
+    if (symbol.name.empty())
         return;
 
     Address64ToIndexMapT::iterator it = m_symbolAddressToIndexMap.find(symbol.address);
