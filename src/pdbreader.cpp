@@ -192,7 +192,7 @@ bool PdbReader::load_dia(const std::string &pdb_file)
 
     if (FAILED(hr))
     {
-        wprintf(L"CoInitialize failed - HRESULT = %08X\n", hr);
+        printf("CoInitialize failed - HRESULT = %08X\n", hr);
         return false;
     }
 
@@ -204,7 +204,10 @@ bool PdbReader::load_dia(const std::string &pdb_file)
 
     if (FAILED(hr))
     {
-        wprintf(L"CoCreateInstance failed - HRESULT = %08X\n", hr);
+        printf("CoCreateInstance failed - HRESULT = %08X\n", hr);
+        printf(
+            "Register msdiaXXX.dll. For example with command:\n"
+            "regsvr32 \"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\DIA SDK\\bin\\amd64\\msdia140.dll\"");
         return false;
     }
 
@@ -216,7 +219,7 @@ bool PdbReader::load_dia(const std::string &pdb_file)
 
     if (FAILED(hr))
     {
-        wprintf(L"loadDataFromPdb failed - HRESULT = %08X\n", hr);
+        printf("loadDataFromPdb failed - HRESULT = %08X\n", hr);
         return false;
     }
 
@@ -226,7 +229,7 @@ bool PdbReader::load_dia(const std::string &pdb_file)
 
     if (FAILED(hr))
     {
-        wprintf(L"openSession failed - HRESULT = %08X\n", hr);
+        printf("openSession failed - HRESULT = %08X\n", hr);
         return false;
     }
 
@@ -236,7 +239,7 @@ bool PdbReader::load_dia(const std::string &pdb_file)
 
     if (hr != S_OK)
     {
-        wprintf(L"get_globalScope failed\n");
+        printf("get_globalScope failed\n");
         return false;
     }
 
@@ -353,7 +356,7 @@ IDiaEnumSourceFiles *PdbReader::get_enum_source_files()
 
     if (m_pDiaSession->getEnumTables(&pEnumTables) != S_OK)
     {
-        wprintf(L"ERROR - GetTable() getEnumTables\n");
+        printf("ERROR - GetTable() getEnumTables\n");
         return NULL;
     }
     while (pEnumTables->Next(1, &pTable, &celt) == S_OK && celt == 1)
@@ -566,7 +569,7 @@ void PdbReader::read_compiland_symbol(PdbCompilandInfo &compilandInfo, IndexT co
 
     if (pSymbol->get_symTag(&dwSymTag) != S_OK)
     {
-        wprintf(L"ERROR - get_symTag() failed\n");
+        printf("ERROR - get_symTag() failed\n");
         return;
     }
 

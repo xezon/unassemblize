@@ -3,12 +3,16 @@
 ## Quick Start
 
 ### Windows
-- Install Visual Studio 2022 with C++ desktop development workload
-- Open the project folder in VS 2022
+
+- Install Visual Studio 2022 with C++ desktop development
+- Register msdiaXXX.dll, for example with command: regsvr32 "C:\Program Files\Microsoft Visual Studio\2022\Community\DIA SDK\bin\amd64\msdia140.dll"
+- Generate solution with CMake
+- Open the generated solution in Visual Studio 2022
 - Select your build configuration (Debug/Release)
 - Build Solution (F7)
 
 ### macOS
+
 ```sh
 # Install dependencies
 brew install cmake ccache clang-format doxygen graphviz glfw
@@ -22,6 +26,7 @@ make -j$(sysctl -n hw.ncpu)
 ```
 
 ### Ubuntu 22.04 or higher
+
 ```sh
 # Install dependencies
 sudo apt-get update && sudo apt-get install -y \
@@ -45,6 +50,7 @@ make -j$(nproc)
 ```
 
 ## Docker (CLI Only)
+
 For command-line usage only, you can use our Docker container:
 ```sh
 docker build -t unassemblize .
