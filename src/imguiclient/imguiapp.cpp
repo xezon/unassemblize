@@ -1343,6 +1343,9 @@ void ImGuiApp::update_functions_interaction(ProgramComparisonDescriptor &descrip
             return false;
         if (!isMatched && !file.m_imguiShowUnmatchedFunctions)
             return false;
+        ProgramComparisonDescriptor::File::ListItemUiInfo &uiInfo = file.m_namedFunctionUiInfos[index];
+        if (uiInfo.m_similarity.has_value() && file.m_imguiMaxSimilarityValue < uiInfo.m_similarity)
+            return false;
         return filter.PassFilter(namedFunctions[index].name);
     };
 
@@ -3011,11 +3014,21 @@ void ImGuiApp::ComparisonManagerFunctionsFilter(
         "Show all unmatched functions. "
         "Unmatched functions are those that do not exist on the other side.");
 
+    selectionChanged |= ImGui::DragInt(
+        "Max similarity",
+        &file.m_imguiMaxSimilarityValue,
+        1.0f,
+        0,
+        100,
+        "%d%%",
+        ImGuiSliderFlags_AlwaysClamp);
+
     if (selectionChanged)
     {
         file.m_functionIndicesFilter.Reset();
         file.m_functionIndicesFilter.SetExternalFilterCondition(
-            !file.m_imguiShowMatchedFunctions || !file.m_imguiShowUnmatchedFunctions);
+            !file.m_imguiShowMatchedFunctions || !file.m_imguiShowUnmatchedFunctions
+            || file.m_imguiMaxSimilarityValue < 100);
     }
 
     selectionChanged |= file.m_functionIndicesFilter.DrawFilter();

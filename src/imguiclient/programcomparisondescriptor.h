@@ -160,6 +160,7 @@ struct ProgramComparisonDescriptor
         // Functions list options.
         bool m_imguiShowMatchedFunctions = true;
         bool m_imguiShowUnmatchedFunctions = true;
+        int m_imguiMaxSimilarityValue = 100;
 
         // Selected bundles in multi select box.
         ImGuiBundlesSelectionArray m_imguiBundlesSelectionArray;
