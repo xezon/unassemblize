@@ -236,7 +236,7 @@ bool NamedFunction::is_disassembled() const
 {
     if (isDisassembled)
     {
-        assert(!function.get_instructions().empty());
+        assert(!function.get_instructions().empty() || function.get_begin_address() == function.get_end_address());
     }
     return isDisassembled;
 }

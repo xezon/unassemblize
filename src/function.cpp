@@ -712,6 +712,9 @@ void Function::disassemble(const FunctionSetup &setup, Address64T begin_address,
 
 void Function::disassemble(const FunctionSetup &setup)
 {
+    if (m_beginAddress == m_endAddress)
+        return;
+
     assert(m_beginAddress < m_endAddress);
 
     const ExeSectionInfo *section_info = setup.m_executable.find_section(m_beginAddress);

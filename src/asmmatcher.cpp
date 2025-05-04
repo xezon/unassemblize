@@ -21,8 +21,6 @@ AsmComparisonResult AsmMatcher::run_comparison(ConstFunctionPair function_pair, 
 
     const AsmInstructions &instructions0 = function_pair[0]->get_instructions();
     const AsmInstructions &instructions1 = function_pair[1]->get_instructions();
-    assert(instructions0.size() != 0);
-    assert(instructions1.size() != 0);
 
     // Creates all instruction splits in advance to avoid redundant splits when visiting instructions multiple times.
     const InstructionTextArrays arrays0 = split_instruction_texts(instructions0);

@@ -691,9 +691,23 @@ ProgramComparisonDescriptor::FunctionsSimilarityReport ProgramComparisonDescript
 
         if (!matchedFunction.is_compared())
         {
-            // Is missing comparison. Report is incomplete.
-            report.totalSimilarity = std::nullopt;
-            break;
+            const NamedFunction &namedFunction0 =
+                m_files[0].m_revisionDescriptor->m_namedFunctions[matchedFunction.named_idx_pair[0]];
+            const NamedFunction &namedFunction1 =
+                m_files[1].m_revisionDescriptor->m_namedFunctions[matchedFunction.named_idx_pair[1]];
+            const bool hasInstructions0 = !namedFunction0.function.get_instructions().empty();
+            const bool hasInstructions1 = !namedFunction1.function.get_instructions().empty();
+            if (hasInstructions0 || hasInstructions1)
+            {
+                // Is missing comparison. Report is incomplete.
+                report.totalSimilarity = std::nullopt;
+                break;
+            }
+            else
+            {
+                // Function pair has no instructions. Skip it.
+                continue;
+            }
         }
         report.totalSimilarity.value() += matchedFunction.comparison.get_similarity_as_int(m_imguiStrictness);
     }

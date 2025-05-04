@@ -177,8 +177,15 @@ void PdbReader::build_function_address_to_index_map()
     m_functionAddressToIndexMap.reserve(size);
     for (IndexT i = 0; i < size; ++i)
     {
-        [[maybe_unused]] auto [_, added] = m_functionAddressToIndexMap.try_emplace(m_functions[i].address.absVirtual, i);
-        assert(added);
+        [[maybe_unused]] auto [it, added] = m_functionAddressToIndexMap.try_emplace(m_functions[i].address.absVirtual, i);
+        if (!added)
+        {
+            const PdbFunctionInfo &thisFunction = m_functions[i];
+            const PdbFunctionInfo &otherFunction = m_functions[it->second];
+            assert(thisFunction.decoratedName == otherFunction.decoratedName);
+            assert(thisFunction.length == otherFunction.length);
+            assert(thisFunction.sourceLines.size() == otherFunction.sourceLines.size());
+        }
     }
 }
 
