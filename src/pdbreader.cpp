@@ -532,6 +532,7 @@ bool PdbReader::read_compilands()
             }
         }
 
+#if 0 // Not using function symbols. They are already contained in public and global symbols.
         {
             // Go through all the symbols defined in this compiland.
 
@@ -557,6 +558,7 @@ bool PdbReader::read_compilands()
                 pEnumChildren->Release();
             }
         }
+#endif
 
         pCompiland->Release();
     }
@@ -804,6 +806,7 @@ void PdbReader::read_compiland_function_start(PdbFunctionInfo &functionInfo, IDi
     if (pSymbol->get_virtualAddress(&dwVA) == S_OK)
     {
         functionInfo.debugStartAddress.absVirtual = dwVA;
+        assert(functionInfo.debugStartAddress.absVirtual >= functionInfo.address.absVirtual);
     }
     if (pSymbol->get_relativeVirtualAddress(&dwRVA) == S_OK)
     {
@@ -833,6 +836,7 @@ void PdbReader::read_compiland_function_end(PdbFunctionInfo &functionInfo, IDiaS
     if (pSymbol->get_virtualAddress(&dwVA) == S_OK)
     {
         functionInfo.debugEndAddress.absVirtual = dwVA;
+        assert(functionInfo.debugEndAddress.absVirtual <= functionInfo.address.absVirtual + functionInfo.length);
     }
     if (pSymbol->get_relativeVirtualAddress(&dwRVA) == S_OK)
     {
