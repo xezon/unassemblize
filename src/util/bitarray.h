@@ -35,10 +35,12 @@ public:
 
     BitArray(uint32_t size, bool defaultValue = false) : m_size(size)
     {
+        if (size == 0)
+            return;
         assert(m_size < (1 << 24)); // Has this limit to offer compact BitIndexer.
-        const uint32_t bitsSize = m_size / 8 + 1;
-        m_bitArray = std::make_unique<uint8_t[]>(bitsSize);
-        std::fill_n(m_bitArray.get(), bitsSize, defaultValue);
+        const uint32_t bytes = byte_size();
+        m_bitArray = std::make_unique<uint8_t[]>(bytes);
+        std::fill_n(m_bitArray.get(), bytes, defaultValue);
     }
 
     bool is_set(BitIndexer indexer) const { return (m_bitArray[indexer.m_bitIndex] & indexer.m_bitMask) != uint8_t(0); }
@@ -47,9 +49,15 @@ public:
 
     void unset(BitIndexer indexer) { m_bitArray[indexer.m_bitIndex] &= ~indexer.m_bitMask; }
 
+    void fill(bool value) { std::fill_n(m_bitArray.get(), byte_size(), value); }
+
     BitIndexer get_indexer(uint32_t index) const { return BitIndexer(index / 8, 1 << (index % 8)); }
 
     uint32_t size() const { return m_size; }
+
+    uint32_t byte_size() const { return m_size / 8 + 1; }
+
+    bool empty() const { return m_size == 0; }
 
 private:
     std::unique_ptr<uint8_t[]> m_bitArray;
