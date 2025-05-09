@@ -147,6 +147,8 @@ if(WINDOWS)
 include(FindDiaSDK)
 endif()
 
+add_subdirectory(resources)
+
 add_executable(unassemblize)
 
 # Common sources for all platforms
