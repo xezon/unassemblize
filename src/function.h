@@ -103,6 +103,9 @@ private:
     ZydisFormatterFunc get_default_format_operand_ptr() const;
     ZydisFormatterRegisterFunc get_default_print_register() const;
 
+    void trim_unreachable_instructions();
+    static IndexT find_last_reachable_instruction_index(const AsmInstructions &instructions);
+
     void add_jump_destination(Address64T jumpDestination, Address64T jumpOrigin);
 
     bool add_pseudo_symbol(Address64T address, std::string_view prefix);

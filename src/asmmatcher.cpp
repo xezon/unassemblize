@@ -276,7 +276,7 @@ AsmMismatchInfo AsmMatcher::create_mismatch_info(
 
 bool AsmMatcher::has_jump_len_mismatch(const AsmInstruction &instruction0, const AsmInstruction &instruction1)
 {
-    return instruction0.isJump && instruction1.isJump && instruction0.jumpLen != instruction1.jumpLen;
+    return instruction0.isLocalJump && instruction1.isLocalJump && instruction0.jumpLen != instruction1.jumpLen;
 }
 
 AsmMismatchInfo AsmMatcher::compare_asm_text(std::string_view text0, std::string_view text1)

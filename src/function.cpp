@@ -13,10 +13,12 @@
 #include "function.h"
 #include "pdbreadertypes.h"
 #include "util.h"
+#include "util/bitarray.h"
 #include <Zycore/Format.h>
 #include <Zydis/Zydis.h>
 #include <fmt/core.h>
 #include <inttypes.h>
+#include <stack>
 
 namespace unassemblize
 {
@@ -48,7 +50,18 @@ bool is_call(const ZydisDecodedInstruction *instruction)
     }
 }
 
-bool is_jump(const ZydisDecodedInstruction *instruction)
+bool is_unconditional_jump(const ZydisDecodedInstruction *instruction)
+{
+    switch (instruction->mnemonic)
+    {
+        case ZYDIS_MNEMONIC_JMP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_conditional_jump(const ZydisDecodedInstruction *instruction)
 {
     switch (instruction->mnemonic)
     {
@@ -60,7 +73,6 @@ bool is_jump(const ZydisDecodedInstruction *instruction)
         case ZYDIS_MNEMONIC_JKZD:
         case ZYDIS_MNEMONIC_JL:
         case ZYDIS_MNEMONIC_JLE:
-        case ZYDIS_MNEMONIC_JMP:
         case ZYDIS_MNEMONIC_JNB:
         case ZYDIS_MNEMONIC_JNBE:
         case ZYDIS_MNEMONIC_JNL:
@@ -74,6 +86,29 @@ bool is_jump(const ZydisDecodedInstruction *instruction)
         case ZYDIS_MNEMONIC_JRCXZ:
         case ZYDIS_MNEMONIC_JS:
         case ZYDIS_MNEMONIC_JZ:
+        case ZYDIS_MNEMONIC_LOOP:
+        case ZYDIS_MNEMONIC_LOOPE:
+        case ZYDIS_MNEMONIC_LOOPNE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_jump(const ZydisDecodedInstruction *instruction)
+{
+    return is_unconditional_jump(instruction) || is_unconditional_jump(instruction);
+}
+
+bool is_return(const ZydisDecodedInstruction *instruction)
+{
+    switch (instruction->mnemonic)
+    {
+        case ZYDIS_MNEMONIC_IRET:
+        case ZYDIS_MNEMONIC_IRETD:
+        case ZYDIS_MNEMONIC_IRETQ:
+        case ZYDIS_MNEMONIC_RET:
+        case ZYDIS_MNEMONIC_SYSRET:
             return true;
         default:
             return false;
@@ -776,17 +811,19 @@ void Function::disassemble(const FunctionSetup &setup)
         if (instruction.info.raw.imm[0].is_relative)
         {
             ZyanU64 addr;
-            if (ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&instruction.info, instruction.operands, instruction_address, &addr))
-                && addr >= m_beginAddress && addr < m_endAddress)
+            if (ZYAN_SUCCESS(ZydisCalcAbsoluteAddress(&instruction.info, instruction.operands, instruction_address, &addr)))
             {
-                if (is_call(&instruction.info))
+                if (addr >= m_beginAddress && addr < m_endAddress)
                 {
-                    add_pseudo_symbol(addr, s_prefix_sub);
-                }
-                else
-                {
-                    add_pseudo_symbol(addr, s_prefix_loc);
-                    add_jump_destination(addr, instruction_address);
+                    if (is_call(&instruction.info))
+                    {
+                        add_pseudo_symbol(addr, s_prefix_sub);
+                    }
+                    else
+                    {
+                        add_pseudo_symbol(addr, s_prefix_loc);
+                        add_jump_destination(addr, instruction_address);
+                    }
                 }
             }
         }
@@ -797,7 +834,7 @@ void Function::disassemble(const FunctionSetup &setup)
     runtime_address = m_beginAddress;
 
     size_t instruction_index = 0;
-    while (section_offset < section_offset_end)
+    while (instruction_index < instruction_count)
     {
         const Address64T instruction_address = runtime_address;
         const Address64T instruction_section_offset = section_offset;
@@ -834,26 +871,247 @@ void Function::disassemble(const FunctionSetup &setup)
         {
             asm_instruction.text = instruction_buffer;
 
-            if (!is_call(&instruction.info) && instruction.info.raw.imm[0].is_relative)
+            if (is_return(&instruction.info))
+            {
+                asm_instruction.isReturn = true;
+            }
+            else if (!is_call(&instruction.info) && instruction.info.raw.imm[0].is_relative)
             {
                 ZyanU64 addr;
-                if (ZYAN_SUCCESS(
-                        ZydisCalcAbsoluteAddress(&instruction.info, instruction.operands, instruction_address, &addr))
-                    && addr >= m_beginAddress && addr < m_endAddress)
+                ZyanStatus status =
+                    ZydisCalcAbsoluteAddress(&instruction.info, instruction.operands, instruction_address, &addr);
+                if (ZYAN_SUCCESS(status))
                 {
+                    if (is_unconditional_jump(&instruction.info))
+                    {
+                        asm_instruction.isUnconditionalJump = true;
+                    }
+                    else
+                    {
+                        asm_instruction.isConditionalJump = true;
+                        assert(is_conditional_jump(&instruction.info));
+                    }
+                    if (addr >= m_beginAddress && addr < m_endAddress)
+                    {
+                        asm_instruction.isLocalJump = true;
+                    }
                     const int64_t offset = int64_t(addr) - int64_t(instruction_address);
-                    asm_instruction.isJump = true;
                     asm_instruction.jumpLen = down_cast<int32_t>(offset);
+                    assert(asm_instruction.jumpLen != 0);
                 }
             }
         }
 
-        m_instructions.emplace_back(std::move(asm_instruction));
+        m_instructions.push_back(std::move(asm_instruction));
     }
 
-    assert(instruction_index == instruction_count);
+    trim_unreachable_instructions();
 
     m_setup = nullptr;
+}
+
+void Function::trim_unreachable_instructions()
+{
+    const IndexT instructionCount = m_instructions.size();
+    const IndexT lastInstructionIndexReached = find_last_reachable_instruction_index(m_instructions);
+
+    // This does not delete the pseudo symbols.
+    for (IndexT i = lastInstructionIndexReached + 1; i < instructionCount; ++i)
+    {
+        if (m_instructions[i].isSymbol)
+            --m_symbolCount;
+    }
+    m_instructions.resize(lastInstructionIndexReached + 1);
+    m_instructions.shrink_to_fit();
+}
+
+#define DEBUG_UNREACHABLE_INSTRUCTIONS 0
+
+IndexT Function::find_last_reachable_instruction_index(const AsmInstructions &instructions)
+{
+#if DEBUG_UNREACHABLE_INSTRUCTIONS
+    int32_t conditionalJumpCount = 0;
+    int32_t unconditionalJumpCount = 0;
+    int32_t returnCount = 0;
+
+    for (const AsmInstruction &instruction : m_instructions)
+    {
+        if (instruction.isConditionalJump)
+            ++conditionalJumpCount;
+        else if (instruction.isUnconditionalJump)
+            ++unconditionalJumpCount;
+        else if (instruction.isReturn)
+            ++returnCount;
+    }
+#endif
+
+    const IndexT instructionCount = instructions.size();
+    BitArray jumpTaken(instructionCount);
+    BitArray jumpNotTaken(instructionCount);
+    BitArray jumpToTake(instructionCount);
+    IndexT lastInstructionIndexReached = 0;
+    std::stack<IndexT> checkpointIndices;
+
+    for (IndexT i = 0; i < instructionCount;)
+    {
+        const AsmInstruction &instruction = instructions[i];
+
+        if (instruction.isConditionalJump)
+        {
+            auto indexer = jumpTaken.get_indexer(i);
+            if (!jumpTaken.is_set(indexer))
+            {
+                // Take this jump.
+                jumpTaken.set(indexer);
+                lastInstructionIndexReached = std::max(i, lastInstructionIndexReached);
+
+                const Address64T targetAddress = instruction.address + instruction.jumpLen;
+                const std::optional<ptrdiff_t> distance =
+                    get_instruction_distance(instructions, instruction.address, targetAddress);
+                assert(distance.has_value());
+                // Push checkpoint because the conditional jump needs to be visited twice.
+                checkpointIndices.push(i);
+                i += down_cast<IndexT>(distance.value());
+                continue;
+            }
+
+            if (!jumpNotTaken.is_set(indexer))
+            {
+                // Skip this jump.
+                jumpNotTaken.set(indexer);
+#if DEBUG_UNREACHABLE_INSTRUCTIONS
+                --conditionalJumpCount;
+#endif
+                ++i;
+                continue;
+            }
+
+            if (checkpointIndices.empty())
+            {
+                // Has no more checkpoints left.
+                // Conditional jump is taken more than 2 times.
+                // Avoid potential infinite loops by alternating the jump condition.
+                auto indexer = jumpToTake.get_indexer(i);
+                if (jumpToTake.is_set(indexer))
+                {
+                    jumpToTake.unset(indexer);
+                    ++i;
+                    continue;
+                }
+                else
+                {
+                    jumpToTake.set(indexer);
+                    const Address64T targetAddress = instruction.address + instruction.jumpLen;
+                    const std::optional<ptrdiff_t> distance =
+                        get_instruction_distance(instructions, instruction.address, targetAddress);
+                    assert(distance.has_value());
+                    i += down_cast<IndexT>(distance.value());
+                    continue;
+                }
+            }
+            else
+            {
+                // Has checkpoints left. Rewind now.
+                i = checkpointIndices.top();
+                checkpointIndices.pop();
+                continue;
+            }
+        }
+        else if (instruction.isUnconditionalJump)
+        {
+            auto indexer = jumpTaken.get_indexer(i);
+            if (!jumpTaken.is_set(indexer))
+            {
+                // Take this jump.
+                jumpTaken.set(indexer);
+                lastInstructionIndexReached = std::max(i, lastInstructionIndexReached);
+#if DEBUG_UNREACHABLE_INSTRUCTIONS
+                --unconditionalJumpCount;
+#endif
+            }
+            else if (!checkpointIndices.empty())
+            {
+                // Has checkpoints left. Rewind now.
+                i = checkpointIndices.top();
+                checkpointIndices.pop();
+                continue;
+            }
+
+            const Address64T targetAddress = instruction.address + instruction.jumpLen;
+            const std::optional<ptrdiff_t> distance =
+                get_instruction_distance(instructions, instruction.address, targetAddress);
+
+            if (distance.has_value())
+            {
+                // Definitely take this local jump.
+                i += down_cast<IndexT>(distance.value());
+                continue;
+            }
+            else if (checkpointIndices.empty())
+            {
+                // Reached the last non-local jump that exits this function. Done.
+                break;
+            }
+            else
+            {
+                // Has checkpoints left. Rewind now.
+                i = checkpointIndices.top();
+                checkpointIndices.pop();
+                continue;
+            }
+        }
+        else if (instruction.isReturn)
+        {
+#if DEBUG_UNREACHABLE_INSTRUCTIONS
+            auto indexer = jumpTaken.get_indexer(i);
+            if (!jumpTaken.is_set(indexer))
+            {
+                jumpTaken.set(indexer);
+                --returnCount;
+            }
+#endif
+
+            lastInstructionIndexReached = std::max(i, lastInstructionIndexReached);
+            if (checkpointIndices.empty())
+            {
+                // Reached the last return. Done.
+                break;
+            }
+            else
+            {
+                // Has checkpoints left. Rewind now.
+                i = checkpointIndices.top();
+                checkpointIndices.pop();
+                continue;
+            }
+        }
+
+        if (i == instructionCount - 1)
+        {
+            lastInstructionIndexReached = std::max(i, lastInstructionIndexReached);
+            if (!checkpointIndices.empty())
+            {
+                // Reached the end of the instructions but checkpoints are left. Rewind now.
+                i = checkpointIndices.top();
+                checkpointIndices.pop();
+                continue;
+            }
+        }
+
+        ++i;
+    }
+
+#if DEBUG_UNREACHABLE_INSTRUCTIONS
+    if (conditionalJumpCount != 0)
+        int a = 0;
+    if (unconditionalJumpCount != 0)
+        int a = 0;
+    if (returnCount != 0)
+        int a = 0;
+#endif
+
+    assert(lastInstructionIndexReached < instructionCount);
+    return lastInstructionIndexReached;
 }
 
 void Function::add_jump_destination(Address64T jumpDestination, Address64T jumpOrigin)

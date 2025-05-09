@@ -88,7 +88,7 @@ std::string AsmPrinter::to_string(const AsmInstruction &instruction, size_t inde
         str.append(instruction.text);
         util::strip_inplace(str, strip_quote);
 
-        if (instruction.isJump)
+        if (instruction.isLocalJump)
         {
             // Append jump distance as inline comment.
             str += fmt::format(" ; {:+d} bytes", instruction.jumpLen);

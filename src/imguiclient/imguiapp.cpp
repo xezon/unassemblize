@@ -134,7 +134,7 @@ void ImGuiApp::AssemblerTableColumnsDrawer::PrintAsmJumpLines(const AsmInstructi
         }
     }
 
-    if (instruction.isJump)
+    if (instruction.isLocalJump)
     {
         // This instruction jumps elsewhere.
 
@@ -3600,7 +3600,7 @@ void ImGuiApp::PrintAsmInstructionAssembler(
 
         TextUnformatted(instruction.text);
 
-        if (instruction.isJump)
+        if (instruction.isLocalJump)
         {
             ImGui::SameLine();
 

@@ -48,7 +48,10 @@ struct AsmInstruction
     AsmInstruction()
     {
         address = 0;
-        isJump = false;
+        isConditionalJump = false;
+        isUnconditionalJump = false;
+        isLocalJump = false;
+        isReturn = false;
         isSymbol = false;
         isInvalid = false;
         isFirstLine = false;
@@ -58,11 +61,15 @@ struct AsmInstruction
 
     void set_bytes(const uint8_t *p, size_t size);
     uint16_t get_line_index() const { return lineNumber - 1; } // Returns ~0 when invalid
+    bool isJump() const { return isConditionalJump || isUnconditionalJump; }
     bool operator<(Address64T a) const { return address < a; }
 
     Address64T address; // Position of the instruction within the executable.
     BytesArray bytes;
-    bool isJump : 1; // Instruction is a jump.
+    bool isConditionalJump : 1; // Instruction is a conditional jump (JMP).
+    bool isUnconditionalJump : 1; // Instruction is an unconditional jump.
+    bool isLocalJump : 1; // Instruction is jumping within the function.
+    bool isReturn : 1; // Instruction is a return.
     bool isSymbol : 1; // Instruction has a symbol at its address. Is jumped to or called.
     bool isInvalid : 1; // Instruction was not read or formatted correctly.
     bool isFirstLine : 1; // This instruction is the first one that corresponds to its line number.
